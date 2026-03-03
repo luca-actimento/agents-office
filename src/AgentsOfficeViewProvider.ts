@@ -217,6 +217,10 @@ export class AgentsOfficeViewProvider implements vscode.WebviewViewProvider {
 								if (wt && this.webview) {
 									sendWallTilesToWebview(this.webview, wt);
 								}
+								const assets = await loadFurnitureAssets(distRoot);
+								if (assets && this.webview) {
+									sendAssetsToWebview(this.webview, assets);
+								}
 							}
 						} catch { /* ignore */ }
 						if (this.webview) {
