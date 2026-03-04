@@ -108,6 +108,8 @@ export const WAITING_BUBBLE_DURATION_SEC = 2.0
 export const DISMISS_BUBBLE_FAST_FADE_SEC = 0.3
 export const INACTIVE_SEAT_TIMER_MIN_SEC = 3.0
 export const INACTIVE_SEAT_TIMER_RANGE_SEC = 2.0
+/** Grace period after a turn ends before character leaves desk (prevents walking-while-working) */
+export const TURN_END_GRACE_SEC = 3.0
 export const PALETTE_COUNT = 6
 export const HUE_SHIFT_MIN_DEG = 45
 export const HUE_SHIFT_RANGE_DEG = 271
@@ -123,5 +125,5 @@ export const BLINK_ANIMATION_DURATION_SEC = 0.8
 // Tile coordinates of the green room (bottom-right) for label + button overlay
 export const CHEFZIMMER_LABEL_COL = 15
 export const CHEFZIMMER_LABEL_ROW = 10.5
-export const CHEFZIMMER_BUTTON_COL = 17
-export const CHEFZIMMER_BUTTON_ROW = 12
+export const CHEFZIMMER_BUTTON_COL = 16
+export const CHEFZIMMER_BUTTON_ROW = 17

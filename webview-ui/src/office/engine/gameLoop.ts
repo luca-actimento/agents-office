@@ -16,15 +16,23 @@ export function startGameLoop(
   let rafId = 0
   let stopped = false
 
+  let errorCount = 0
+
   const frame = (time: number) => {
     if (stopped) return
     const dt = lastTime === 0 ? 0 : Math.min((time - lastTime) / 1000, MAX_DELTA_TIME_SEC)
     lastTime = time
 
-    callbacks.update(dt)
-
-    ctx.imageSmoothingEnabled = false
-    callbacks.render(ctx)
+    try {
+      callbacks.update(dt)
+      ctx.imageSmoothingEnabled = false
+      callbacks.render(ctx)
+    } catch (err) {
+      errorCount++
+      if (errorCount <= 3) {
+        console.error('[GameLoop] render error:', err)
+      }
+    }
 
     rafId = requestAnimationFrame(frame)
   }

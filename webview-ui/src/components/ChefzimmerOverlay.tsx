@@ -9,6 +9,7 @@ interface ChefzimmerOverlayProps {
   containerRef: React.RefObject<HTMLDivElement | null>
   zoom: number
   panRef: React.RefObject<{ x: number; y: number }>
+  isEditMode: boolean
 }
 
 function tileToScreen(
@@ -35,6 +36,7 @@ export function ChefzimmerOverlay({
   containerRef,
   zoom,
   panRef,
+  isEditMode,
 }: ChefzimmerOverlayProps) {
   const [, setTick] = useState(0)
   const [hovered, setHovered] = useState(false)
@@ -67,29 +69,32 @@ export function ChefzimmerOverlay({
     vscode.postMessage({ type: 'openClaude', model: 'opus' })
   }
 
+
   return (
     <>
-      {/* Chefzimmer Label */}
-      <div
-        style={{
-          position: 'absolute',
-          left: labelPos.x,
-          top: labelPos.y,
-          transform: 'translateX(-50%)',
-          pointerEvents: 'none',
-          zIndex: 35,
-          fontSize: '18px',
-          color: 'var(--pixel-text-dim)',
-          background: 'rgba(30, 30, 46, 0.6)',
-          padding: '1px 6px',
-          border: '1px solid var(--pixel-border)',
-          borderRadius: 0,
-          whiteSpace: 'nowrap',
-          letterSpacing: '1px',
-        }}
-      >
-        Chefzimmer
-      </div>
+      {/* Chefzimmer Label – nur im Edit-Mode */}
+      {isEditMode && (
+        <div
+          style={{
+            position: 'absolute',
+            left: labelPos.x,
+            top: labelPos.y,
+            transform: 'translateX(-50%)',
+            pointerEvents: 'none',
+            zIndex: 35,
+            fontSize: '18px',
+            color: 'var(--pixel-text-dim)',
+            background: 'rgba(30, 30, 46, 0.6)',
+            padding: '1px 6px',
+            border: '1px solid var(--pixel-border)',
+            borderRadius: 0,
+            whiteSpace: 'nowrap',
+            letterSpacing: '1px',
+          }}
+        >
+          Chefzimmer
+        </div>
+      )}
 
       {/* Opus Button over green table */}
       <button

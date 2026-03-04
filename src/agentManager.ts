@@ -34,7 +34,7 @@ export async function launchNewTerminal(
 	folderPath?: string,
 	model?: string,
 ): Promise<void> {
-	const cwd = folderPath || os.homedir();
+	const cwd = folderPath || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || os.homedir();
 	const folders = vscode.workspace.workspaceFolders;
 	const isMultiRoot = !!(folders && folders.length > 1);
 	const idx = nextTerminalIndexRef.current++;
@@ -84,7 +84,7 @@ export async function launchNewTerminal(
 	activeAgentIdRef.current = id;
 	persistAgents();
 	console.log(`[Agents Office] Agent ${id}: created for terminal ${terminal.name}`);
-	webview?.postMessage({ type: 'agentCreated', id, folderName });
+	webview?.postMessage({ type: 'agentCreated', id, folderName, projectDir });
 
 	ensureProjectScan(
 		projectDir, knownJsonlFiles, projectScanTimerRef, activeAgentIdRef,
@@ -280,12 +280,14 @@ export function sendExistingAgents(
 	// Include persisted palette/seatId from separate key
 	const agentMeta = context.workspaceState.get<Record<string, { palette?: number; seatId?: string }>>(WORKSPACE_KEY_AGENT_SEATS, {});
 
-	// Include folderName per agent
+	// Include folderName and projectDir per agent
 	const folderNames: Record<number, string> = {};
+	const projectDirs: Record<number, string> = {};
 	for (const [id, agent] of agents) {
 		if (agent.folderName) {
 			folderNames[id] = agent.folderName;
 		}
+		projectDirs[id] = agent.projectDir;
 	}
 	console.log(`[Agents Office] sendExistingAgents: agents=${JSON.stringify(agentIds)}, meta=${JSON.stringify(agentMeta)}`);
 
@@ -294,6 +296,7 @@ export function sendExistingAgents(
 		agents: agentIds,
 		agentMeta,
 		folderNames,
+		projectDirs,
 	});
 
 	sendCurrentAgentStatuses(agents, webview);

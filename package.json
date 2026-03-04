@@ -31,11 +31,11 @@
       }
     ],
     "viewsContainers": {
-      "panel": [
+      "activitybar": [
         {
           "id": "agents-office-panel",
           "title": "Agents Office",
-          "icon": "$(window)"
+          "icon": "icon.svg"
         }
       ]
     },

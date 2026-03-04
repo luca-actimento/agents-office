@@ -319,6 +319,7 @@ function App() {
         containerRef={containerRef}
         zoom={editor.zoom}
         panRef={editor.panRef}
+        isEditMode={editor.isEditMode}
       />
 
       <ToolOverlay

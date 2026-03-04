@@ -105,9 +105,9 @@ export class AgentsOfficeViewProvider implements vscode.WebviewViewProvider {
 				const soundEnabled = this.context.globalState.get<boolean>(GLOBAL_KEY_SOUND_ENABLED, true);
 				this.webview?.postMessage({ type: 'settingsLoaded', soundEnabled });
 
-				// Send workspace folders to webview (only when multi-root)
+				// Send workspace folders to webview
 				const wsFolders = vscode.workspace.workspaceFolders;
-				if (wsFolders && wsFolders.length > 1) {
+				if (wsFolders && wsFolders.length >= 1) {
 					this.webview?.postMessage({
 						type: 'workspaceFolders',
 						folders: wsFolders.map(f => ({ name: f.name, path: f.uri.fsPath })),

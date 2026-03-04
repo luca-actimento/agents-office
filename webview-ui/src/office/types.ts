@@ -203,6 +203,8 @@ export interface Character {
   isSubagent: boolean
   /** Parent agent ID if this is a sub-agent, null otherwise */
   parentAgentId: number | null
+  /** When true, skip the 2-4 min seat rest when arriving back at desk (set at turn end) */
+  skipNextSeatRest: boolean
   /** Active matrix spawn/despawn effect, or null */
   matrixEffect: 'spawn' | 'despawn' | null
   /** Timer counting up from 0 to MATRIX_EFFECT_DURATION */
@@ -211,6 +213,8 @@ export interface Character {
   matrixEffectSeeds: number[]
   /** Workspace folder name (only set for multi-root workspaces) */
   folderName?: string
+  /** If true, this is a static mascot NPC (not a real agent — click opens its project) */
+  isMascot?: boolean
   /** Current café routine phase, or null if not in café */
   cafePhase: 'going_to_counter' | 'brewing' | 'going_to_seat' | 'sitting' | null
   /** Timer for brewing at counter (counts down) */

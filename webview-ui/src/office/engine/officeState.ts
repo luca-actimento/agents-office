@@ -7,6 +7,7 @@ import {
   DISMISS_BUBBLE_FAST_FADE_SEC,
   INACTIVE_SEAT_TIMER_MIN_SEC,
   INACTIVE_SEAT_TIMER_RANGE_SEC,
+  TURN_END_GRACE_SEC,
   AUTO_ON_FACING_DEPTH,
   AUTO_ON_SIDE_DEPTH,
   CHARACTER_SITTING_OFFSET_PX,
@@ -48,6 +49,14 @@ export class OfficeState {
   subagentMeta: Map<number, { parentAgentId: number; parentToolId: string }> = new Map()
   private nextSubagentId = -1
 
+  // ── Static mascot NPCs ──────────────────────────────────────────────────
+  static readonly MASCOT_ACTIMENTO_ID = -999
+
+  /** Mascot config: each entry defines a permanent NPC in the office */
+  static readonly MASCOTS = [
+    { id: OfficeState.MASCOT_ACTIMENTO_ID, palette: 6, col: 6, row: 2, dir: Direction.DOWN, label: 'Actimento' },
+  ] as const
+
   constructor(layout?: OfficeLayout) {
     this.layout = layout || createDefaultLayout()
     this.tileMap = layoutToTileMap(this.layout)
@@ -57,6 +66,25 @@ export class OfficeState {
     this.walkableTiles = getWalkableTiles(this.tileMap, this.blockedTiles)
     this.cafeWalkableTiles = this.buildCafeWalkableTiles()
     this.cafeSeatIds = this.buildCafeSeatIds()
+    this.initMascots()
+  }
+
+  /** Place permanent mascot NPCs into the office. Safe to call multiple times. */
+  private initMascots(): void {
+    for (const m of OfficeState.MASCOTS) {
+      if (this.characters.has(m.id)) continue
+      const ch = createCharacter(m.id, m.palette, null, null, 0)
+      ch.x = m.col * TILE_SIZE + TILE_SIZE / 2
+      ch.y = m.row * TILE_SIZE + TILE_SIZE / 2
+      ch.tileCol = m.col
+      ch.tileRow = m.row
+      ch.dir = m.dir
+      ch.state = CharacterState.TYPE
+      ch.isActive = true
+      ch.isMascot = true
+      ch.folderName = m.label
+      this.characters.set(m.id, ch)
+    }
   }
 
   /** Rebuild all derived state from a new layout. Reassigns existing characters.
@@ -89,8 +117,9 @@ export class OfficeState {
       seat.assigned = false
     }
 
-    // First pass: try to keep characters at their existing seats
+    // First pass: try to keep characters at their existing seats (skip mascots)
     for (const ch of this.characters.values()) {
+      if (ch.isMascot) continue // mascots have fixed positions, not seats
       if (ch.seatId && this.seats.has(ch.seatId)) {
         const seat = this.seats.get(ch.seatId)!
         if (!seat.assigned) {
@@ -207,8 +236,10 @@ export class OfficeState {
     // Count how many non-sub-agents use each base palette (0-5)
     const counts = new Array(PALETTE_COUNT).fill(0) as number[]
     for (const ch of this.characters.values()) {
-      if (ch.isSubagent) continue
-      counts[ch.palette]++
+      if (ch.isSubagent || ch.isMascot) continue
+      if (ch.palette >= 0 && ch.palette < PALETTE_COUNT) {
+        counts[ch.palette]++
+      }
     }
     const minCount = Math.min(...counts)
     // Available = palettes at the minimum count (least used)
@@ -225,7 +256,7 @@ export class OfficeState {
     return { palette, hueShift }
   }
 
-  addAgent(id: number, preferredPalette?: number, preferredHueShift?: number, preferredSeatId?: string, skipSpawnEffect?: boolean, folderName?: string): void {
+  addAgent(id: number, preferredPalette?: number, preferredHueShift?: number, preferredSeatId?: string, skipSpawnEffect?: boolean, folderName?: string, projectPath?: string): void {
     if (this.characters.has(id)) return
 
     let palette: number
@@ -233,6 +264,13 @@ export class OfficeState {
     if (preferredPalette !== undefined) {
       palette = preferredPalette
       hueShift = preferredHueShift ?? 0
+    } else if (
+      (folderName && folderName.toLowerCase().includes('actimento')) ||
+      (projectPath && projectPath.toLowerCase().includes('actimento'))
+    ) {
+      // Actimento Hub gets its own CI character (char_6)
+      palette = 6
+      hueShift = 0
     } else {
       const pick = this.pickDiversePalette()
       palette = pick.palette
@@ -399,12 +437,12 @@ export class OfficeState {
     const palette = parentCh ? parentCh.palette : 0
     const hueShift = parentCh ? parentCh.hueShift : 0
 
-    // Find the free seat closest to the parent agent
     const parentCol = parentCh ? parentCh.tileCol : 0
     const parentRow = parentCh ? parentCh.tileRow : 0
     const dist = (c: number, r: number) =>
       Math.abs(c - parentCol) + Math.abs(r - parentRow)
 
+    // Find closest free seat to parent
     let bestSeatId: string | null = null
     let bestDist = Infinity
     for (const [uid, seat] of this.seats) {
@@ -417,32 +455,36 @@ export class OfficeState {
       }
     }
 
-    let ch: Character
+    // Find closest walkable tile to parent as spawn position
+    let spawnTile = { col: parentCol, row: parentRow }
+    if (this.walkableTiles.length > 0) {
+      let closest = this.walkableTiles[0]
+      let closestDist = dist(closest.col, closest.row)
+      for (let i = 1; i < this.walkableTiles.length; i++) {
+        const d = dist(this.walkableTiles[i].col, this.walkableTiles[i].row)
+        if (d < closestDist) {
+          closest = this.walkableTiles[i]
+          closestDist = d
+        }
+      }
+      spawnTile = closest
+    }
+
+    // Spawn at walkable tile near parent, then walk to seat after spawn effect
+    const ch = createCharacter(id, palette, null, null, hueShift)
+    ch.x = spawnTile.col * TILE_SIZE + TILE_SIZE / 2
+    ch.y = spawnTile.row * TILE_SIZE + TILE_SIZE / 2
+    ch.tileCol = spawnTile.col
+    ch.tileRow = spawnTile.row
+
     if (bestSeatId) {
       const seat = this.seats.get(bestSeatId)!
       seat.assigned = true
-      ch = createCharacter(id, palette, bestSeatId, seat, hueShift)
-    } else {
-      // No seats — spawn at closest walkable tile to parent
-      let spawn = { col: 1, row: 1 }
-      if (this.walkableTiles.length > 0) {
-        let closest = this.walkableTiles[0]
-        let closestDist = dist(closest.col, closest.row)
-        for (let i = 1; i < this.walkableTiles.length; i++) {
-          const d = dist(this.walkableTiles[i].col, this.walkableTiles[i].row)
-          if (d < closestDist) {
-            closest = this.walkableTiles[i]
-            closestDist = d
-          }
-        }
-        spawn = closest
-      }
-      ch = createCharacter(id, palette, null, null, hueShift)
-      ch.x = spawn.col * TILE_SIZE + TILE_SIZE / 2
-      ch.y = spawn.row * TILE_SIZE + TILE_SIZE / 2
-      ch.tileCol = spawn.col
-      ch.tileRow = spawn.row
+      ch.seatId = bestSeatId
+      // IDLE + isActive=true → after spawn effect, FSM pathfinds to seat and walks there
+      ch.state = CharacterState.IDLE
     }
+
     ch.isSubagent = true
     ch.parentAgentId = parentAgentId
     ch.matrixEffect = 'spawn'
@@ -545,9 +587,10 @@ export class OfficeState {
         // If was WALK, the walk handler's repath logic will redirect to work seat
       }
       if (!active) {
-        // Sentinel -1: signals turn just ended, skip next seat rest timer.
-        // Prevents the WALK handler from setting a 2-4 min rest on arrival.
-        ch.seatTimer = -1
+        // Grace period: keep character seated for TURN_END_GRACE_SEC before going idle.
+        // Prevents walking-while-working when a new turn starts quickly after a turn ends.
+        ch.seatTimer = TURN_END_GRACE_SEC
+        ch.skipNextSeatRest = true
         ch.path = []
         ch.moveProgress = 0
       }
@@ -610,7 +653,11 @@ export class OfficeState {
       return item
     })
 
-    this.furniture = layoutToFurnitureInstances(modifiedFurniture)
+    const rebuilt = layoutToFurnitureInstances(modifiedFurniture)
+    // Guard: if layout has furniture but rebuild returns empty, the dynamic
+    // catalog isn't loaded yet — keep existing instances to avoid blank office
+    if (rebuilt.length === 0 && modifiedFurniture.length > 0) return
+    this.furniture = rebuilt
   }
 
   /** Auto-open/close doors based on agent proximity */

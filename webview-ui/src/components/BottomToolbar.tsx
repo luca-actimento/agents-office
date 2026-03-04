@@ -79,6 +79,8 @@ export function BottomToolbar({
   const handleAgentClick = () => {
     if (hasMultipleFolders) {
       setIsFolderPickerOpen((v) => !v)
+    } else if (workspaceFolders.length === 1) {
+      vscode.postMessage({ type: 'openClaude', folderPath: workspaceFolders[0].path, model: 'sonnet' })
     } else {
       onOpenClaude()
     }
