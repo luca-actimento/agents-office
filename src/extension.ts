@@ -2,10 +2,12 @@ import * as vscode from 'vscode';
 import { AgentsOfficeViewProvider } from './AgentsOfficeViewProvider.js';
 import { VIEW_ID, COMMAND_SHOW_PANEL, COMMAND_EXPORT_DEFAULT_LAYOUT, COMMAND_TEST_SUBAGENT } from './constants.js';
 import { checkForUpdate } from './updateChecker.js';
+import { ensureDefaultLayout } from './defaultLayout.js';
 
 let providerInstance: AgentsOfficeViewProvider | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
+	ensureDefaultLayout();
 	checkForUpdate(context);
 
 	const provider = new AgentsOfficeViewProvider(context);
