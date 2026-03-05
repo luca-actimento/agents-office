@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { execSync } from 'child_process';
 import * as vscode from 'vscode';
 import type { AgentState, PersistedAgent } from './types.js';
 import { cancelWaitingTimer, cancelPermissionTimer } from './timerManager.js';
@@ -77,6 +78,7 @@ export async function launchNewTerminal(
 		isWaiting: false,
 		permissionSent: false,
 		hadToolsInTurn: false,
+		lastActivityTime: Date.now(),
 		folderName,
 	};
 
@@ -159,7 +161,18 @@ export function persistAgents(
 	context.workspaceState.update(WORKSPACE_KEY_AGENTS, persisted);
 }
 
-export function restoreAgents(
+/** Check if a 'claude' subprocess is running under the given shell PID */
+function isClaudeRunningInShell(shellPid: number): boolean {
+	try {
+		const result = execSync(`pgrep -P ${shellPid} -f claude`, { encoding: 'utf8', stdio: 'pipe' });
+		return result.trim().length > 0;
+	} catch {
+		// pgrep exits with code 1 if no matches
+		return false;
+	}
+}
+
+export async function restoreAgents(
 	context: vscode.ExtensionContext,
 	nextAgentIdRef: { current: number },
 	nextTerminalIndexRef: { current: number },
@@ -174,7 +187,7 @@ export function restoreAgents(
 	activeAgentIdRef: { current: number | null },
 	webview: vscode.Webview | undefined,
 	doPersist: () => void,
-): void {
+): Promise<void> {
 	const persisted = context.workspaceState.get<PersistedAgent[]>(WORKSPACE_KEY_AGENTS, []);
 	if (persisted.length === 0) return;
 
@@ -184,8 +197,38 @@ export function restoreAgents(
 	let restoredProjectDir: string | null = null;
 
 	for (const p of persisted) {
-		const terminal = liveTerminals.find(t => t.name === p.terminalName);
+		// Only restore if the terminal process is still running (exitStatus is undefined when alive).
+		// VS Code persists terminal visuals across restarts even after the process exits —
+		// without this check, stale terminals would wrongly spawn agents in a new window.
+		const terminal = liveTerminals.find(t => t.name === p.terminalName && t.exitStatus === undefined);
 		if (!terminal) continue;
+
+		// JSONL must exist — no active Claude Code session without it.
+		if (!fs.existsSync(p.jsonlFile)) {
+			console.log(`[Agents Office] Skipping agent ${p.id} — JSONL not found`);
+			continue;
+		}
+
+		// Primary check: is 'claude' actually running as a subprocess of this terminal's shell?
+		// VS Code's terminal persistence keeps exitStatus=undefined even after the process exits,
+		// so we must verify the process is truly alive.
+		const shellPid = await terminal.processId;
+		if (shellPid !== undefined) {
+			const claudeRunning = isClaudeRunningInShell(shellPid);
+			if (!claudeRunning) {
+				console.log(`[Agents Office] Skipping agent ${p.id} — no active claude process under shell PID ${shellPid}`);
+				continue;
+			}
+		} else {
+			// Fallback: if we can't get shell PID, check JSONL freshness (5 min window)
+			try {
+				const mtime = fs.statSync(p.jsonlFile).mtimeMs;
+				if (Date.now() - mtime > 5 * 60 * 1000) {
+					console.log(`[Agents Office] Skipping agent ${p.id} — cannot verify process and JSONL is stale`);
+					continue;
+				}
+			} catch { continue; }
+		}
 
 		const agent: AgentState = {
 			id: p.id,
@@ -202,6 +245,7 @@ export function restoreAgents(
 			isWaiting: false,
 			permissionSent: false,
 			hadToolsInTurn: false,
+			lastActivityTime: Date.now(),
 			folderName: p.folderName,
 		};
 
@@ -317,14 +361,22 @@ export function sendCurrentAgentStatuses(
 				status,
 			});
 		}
-		// Re-send waiting status
+		// Re-send status
 		if (agent.isWaiting) {
 			webview.postMessage({
 				type: 'agentStatus',
 				id: agentId,
 				status: 'waiting',
 			});
+		} else if (agent.activeToolStatuses.size > 0) {
+			// Has active tools → agent is still working
+			webview.postMessage({
+				type: 'agentStatus',
+				id: agentId,
+				status: 'active',
+			});
 		}
+		// Otherwise: no status sent → agent starts inactive (isActive=false from addAgent)
 	}
 }
 

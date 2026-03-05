@@ -15,6 +15,7 @@ export interface AgentState {
 	isWaiting: boolean;
 	permissionSent: boolean;
 	hadToolsInTurn: boolean;
+	lastActivityTime: number;
 	/** Workspace folder name (only set for multi-root workspaces) */
 	folderName?: string;
 }

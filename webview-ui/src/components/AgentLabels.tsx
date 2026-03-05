@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import type { OfficeState } from '../office/engine/officeState.js'
 import type { SubagentCharacter } from '../hooks/useExtensionMessages.js'
 import { TILE_SIZE, CharacterState } from '../office/types.js'
+import { SUBAGENT_SCALE } from '../constants.js'
 
 interface AgentLabelsProps {
   officeState: OfficeState
@@ -63,8 +64,10 @@ export function AgentLabels({
 
         // Character position: device pixels → CSS pixels (follow sitting offset)
         const sittingOffset = ch.state === CharacterState.TYPE ? 6 : 0
+        // Subagents are rendered at SUBAGENT_SCALE so their sprite top is higher up
+        const spriteH = ch.isSubagent ? 24 * SUBAGENT_SCALE : 24
         const screenX = (deviceOffsetX + ch.x * zoom) / dpr
-        const screenY = (deviceOffsetY + (ch.y + sittingOffset - 24) * zoom) / dpr
+        const screenY = (deviceOffsetY + (ch.y + sittingOffset - spriteH) * zoom) / dpr
 
         const status = agentStatuses[id]
         const isWaiting = status === 'waiting'
@@ -109,19 +112,19 @@ export function AgentLabels({
             )}
             <span
               style={{
-                fontSize: isSub ? '16px' : '18px',
-                fontStyle: isSub ? 'italic' : undefined,
-                color: 'var(--vscode-foreground)',
-                background: 'rgba(30,30,46,0.7)',
+                fontSize: isSub ? '15px' : '18px',
+                color: isSub ? '#e0b0ff' : 'var(--vscode-foreground)',
+                background: isSub ? 'rgba(100, 40, 160, 0.88)' : 'rgba(30,30,46,0.7)',
+                border: isSub ? '1px solid rgba(180, 100, 255, 0.6)' : undefined,
                 padding: '1px 4px',
                 borderRadius: 2,
                 whiteSpace: 'nowrap',
-                maxWidth: isSub ? 120 : undefined,
+                maxWidth: isSub ? 130 : undefined,
                 overflow: isSub ? 'hidden' : undefined,
                 textOverflow: isSub ? 'ellipsis' : undefined,
               }}
             >
-              {labelText}
+              {isSub ? `subagent: ${labelText}` : labelText}
             </span>
           </div>
         )

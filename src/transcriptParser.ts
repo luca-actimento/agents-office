@@ -8,6 +8,7 @@ import {
 	startPermissionTimer,
 	cancelPermissionTimer,
 } from './timerManager.js';
+import { debugLog } from './debugLog.js';
 import {
 	TOOL_DONE_DELAY_MS,
 	TEXT_IDLE_DELAY_MS,
@@ -15,7 +16,9 @@ import {
 	TASK_DESCRIPTION_DISPLAY_MAX_LENGTH,
 } from './constants.js';
 
-export const PERMISSION_EXEMPT_TOOLS = new Set(['Task', 'AskUserQuestion']);
+// Tools that can genuinely get stuck waiting for VS Code permission confirmation.
+// Only these start the permission timer. Sub-agent tools and AskUserQuestion are handled separately.
+export const PERMISSION_REQUIRING_TOOLS = new Set(['Bash', 'WebFetch', 'WebSearch']);
 
 export function formatToolStatus(toolName: string, input: Record<string, unknown>): string {
 	const base = (p: unknown) => typeof p === 'string' ? path.basename(p) : '';
@@ -31,7 +34,8 @@ export function formatToolStatus(toolName: string, input: Record<string, unknown
 		case 'Grep': return 'Searching code';
 		case 'WebFetch': return 'Fetching web content';
 		case 'WebSearch': return 'Searching the web';
-		case 'Task': {
+		case 'Task':
+		case 'Agent': {
 			const desc = typeof input.description === 'string' ? input.description : '';
 			return desc ? `Subtask: ${desc.length > TASK_DESCRIPTION_DISPLAY_MAX_LENGTH ? desc.slice(0, TASK_DESCRIPTION_DISPLAY_MAX_LENGTH) + '\u2026' : desc}` : 'Running subtask';
 		}
@@ -65,8 +69,10 @@ export function processTranscriptLine(
 				cancelWaitingTimer(agentId, waitingTimers);
 				agent.isWaiting = false;
 				agent.hadToolsInTurn = true;
+				debugLog(`agent ${agentId}: assistant tool_use → active`);
 				webview?.postMessage({ type: 'agentStatus', id: agentId, status: 'active' });
-				let hasNonExemptTool = false;
+				let hasPermissionRequiringTool = false;
+				let hasAskUserQuestion = false;
 				for (const block of blocks) {
 					if (block.type === 'tool_use' && block.id) {
 						const toolName = block.name || '';
@@ -75,8 +81,10 @@ export function processTranscriptLine(
 						agent.activeToolIds.add(block.id);
 						agent.activeToolStatuses.set(block.id, status);
 						agent.activeToolNames.set(block.id, toolName);
-						if (!PERMISSION_EXEMPT_TOOLS.has(toolName)) {
-							hasNonExemptTool = true;
+						if (toolName === 'AskUserQuestion') {
+							hasAskUserQuestion = true;
+						} else if (PERMISSION_REQUIRING_TOOLS.has(toolName)) {
+							hasPermissionRequiringTool = true;
 						}
 						webview?.postMessage({
 							type: 'agentToolStart',
@@ -86,14 +94,19 @@ export function processTranscriptLine(
 						});
 					}
 				}
-				if (hasNonExemptTool) {
-					startPermissionTimer(agentId, agents, permissionTimers, PERMISSION_EXEMPT_TOOLS, webview);
+				// AskUserQuestion: notify immediately – user must answer
+				if (hasAskUserQuestion && !agent.permissionSent) {
+					agent.permissionSent = true;
+					webview?.postMessage({ type: 'agentToolPermission', id: agentId });
+				} else if (hasPermissionRequiringTool) {
+					startPermissionTimer(agentId, agents, permissionTimers, PERMISSION_REQUIRING_TOOLS, webview);
 				}
 			} else if (blocks.some(b => b.type === 'text') && !agent.hadToolsInTurn) {
 				// Text-only response in a turn that hasn't used any tools.
 				// turn_duration handles tool-using turns reliably but is never
 				// emitted for text-only turns, so we use a silence-based timer:
 				// if no new JSONL data arrives within TEXT_IDLE_DELAY_MS, mark as waiting.
+				debugLog(`agent ${agentId}: text-only → TEXT_IDLE timer ${TEXT_IDLE_DELAY_MS}ms`);
 				startWaitingTimer(agentId, TEXT_IDLE_DELAY_MS, agents, waitingTimers, webview);
 			}
 		} else if (record.type === 'progress') {
@@ -104,12 +117,15 @@ export function processTranscriptLine(
 				const blocks = content as Array<{ type: string; tool_use_id?: string }>;
 				const hasToolResult = blocks.some(b => b.type === 'tool_result');
 				if (hasToolResult) {
+					// Claude is about to process these results → mark as active (thinking)
+					debugLog(`agent ${agentId}: user tool_result → active`);
+					webview?.postMessage({ type: 'agentStatus', id: agentId, status: 'active' });
 					for (const block of blocks) {
 						if (block.type === 'tool_result' && block.tool_use_id) {
 							console.log(`[Agents Office] Agent ${agentId} tool done: ${block.tool_use_id}`);
 							const completedToolId = block.tool_use_id;
-							// If the completed tool was a Task, clear its subagent tools
-							if (agent.activeToolNames.get(completedToolId) === 'Task') {
+							// If the completed tool was a Task/Agent, clear its subagent tools
+							if (agent.activeToolNames.get(completedToolId) === 'Task' || agent.activeToolNames.get(completedToolId) === 'Agent') {
 								agent.activeSubagentToolIds.delete(completedToolId);
 								agent.activeSubagentToolNames.delete(completedToolId);
 								webview?.postMessage({
@@ -149,6 +165,7 @@ export function processTranscriptLine(
 				agent.hadToolsInTurn = false;
 			}
 		} else if (record.type === 'system' && record.subtype === 'turn_duration') {
+			debugLog(`agent ${agentId}: turn_duration → waiting`);
 			cancelWaitingTimer(agentId, waitingTimers);
 			cancelPermissionTimer(agentId, permissionTimers);
 
@@ -197,14 +214,15 @@ function processProgressRecord(
 	// Restart the permission timer to give the running tool another window.
 	const dataType = data.type as string | undefined;
 	if (dataType === 'bash_progress' || dataType === 'mcp_progress') {
+		// Tool is actively running – reset the permission timer window
 		if (agent.activeToolIds.has(parentToolId)) {
-			startPermissionTimer(agentId, agents, permissionTimers, PERMISSION_EXEMPT_TOOLS, webview);
+			startPermissionTimer(agentId, agents, permissionTimers, PERMISSION_REQUIRING_TOOLS, webview);
 		}
 		return;
 	}
 
-	// Verify parent is an active Task tool (agent_progress handling)
-	if (agent.activeToolNames.get(parentToolId) !== 'Task') return;
+	// Verify parent is an active Task/Agent tool (agent_progress handling)
+	if (agent.activeToolNames.get(parentToolId) !== 'Task' && agent.activeToolNames.get(parentToolId) !== 'Agent') return;
 
 	const msg = data.message as Record<string, unknown> | undefined;
 	if (!msg) return;
@@ -215,7 +233,6 @@ function processProgressRecord(
 	if (!Array.isArray(content)) return;
 
 	if (msgType === 'assistant') {
-		let hasNonExemptSubTool = false;
 		for (const block of content) {
 			if (block.type === 'tool_use' && block.id) {
 				const toolName = block.name || '';
@@ -238,10 +255,6 @@ function processProgressRecord(
 				}
 				subNames.set(block.id, toolName);
 
-				if (!PERMISSION_EXEMPT_TOOLS.has(toolName)) {
-					hasNonExemptSubTool = true;
-				}
-
 				webview?.postMessage({
 					type: 'subagentToolStart',
 					id: agentId,
@@ -250,9 +263,6 @@ function processProgressRecord(
 					status,
 				});
 			}
-		}
-		if (hasNonExemptSubTool) {
-			startPermissionTimer(agentId, agents, permissionTimers, PERMISSION_EXEMPT_TOOLS, webview);
 		}
 	} else if (msgType === 'user') {
 		for (const block of content) {
@@ -279,21 +289,6 @@ function processProgressRecord(
 					});
 				}, 300);
 			}
-		}
-		// If there are still active non-exempt sub-agent tools, restart the permission timer
-		// (handles the case where one sub-agent completes but another is still stuck)
-		let stillHasNonExempt = false;
-		for (const [, subNames] of agent.activeSubagentToolNames) {
-			for (const [, toolName] of subNames) {
-				if (!PERMISSION_EXEMPT_TOOLS.has(toolName)) {
-					stillHasNonExempt = true;
-					break;
-				}
-			}
-			if (stillHasNonExempt) break;
-		}
-		if (stillHasNonExempt) {
-			startPermissionTimer(agentId, agents, permissionTimers, PERMISSION_EXEMPT_TOOLS, webview);
 		}
 	}
 }

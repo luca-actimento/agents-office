@@ -274,7 +274,7 @@ export const LAMP_SPRITE: SpriteData = (() => {
 
 // ── Door Sprites ────────────────────────────────────────────────
 
-/** Door closed (front-facing): 16x32 — wooden door with frame and handle */
+/** Door closed (front-facing): 32x32 — double wooden door with frame and handles */
 export const DOOR_CLOSED_FRONT_SPRITE: SpriteData = (() => {
   const F = '#8B7355' // frame
   const D = '#6B4E0A' // dark frame edge
@@ -282,186 +282,59 @@ export const DOOR_CLOSED_FRONT_SPRITE: SpriteData = (() => {
   const L = '#B8922E' // lighter wood
   const H = '#FFD700' // handle (gold)
   const S = '#5C4033' // shadow
-  return [
-    // Top frame
-    [_, _, _, D, D, D, D, D, D, D, D, D, D, _, _, _],
-    [_, _, _, D, F, F, F, F, F, F, F, F, D, _, _, _],
-    // Door panel
-    [_, _, _, D, W, W, W, W, W, W, W, W, D, _, _, _],
-    [_, _, _, D, W, L, L, L, L, L, L, W, D, _, _, _],
-    [_, _, _, D, W, L, W, W, W, W, L, W, D, _, _, _],
-    [_, _, _, D, W, L, W, W, W, W, L, W, D, _, _, _],
-    [_, _, _, D, W, L, W, W, W, W, L, W, D, _, _, _],
-    [_, _, _, D, W, L, L, L, L, L, L, W, D, _, _, _],
-    [_, _, _, D, W, W, W, W, W, W, W, W, D, _, _, _],
-    [_, _, _, D, W, L, L, L, L, L, L, W, D, _, _, _],
-    [_, _, _, D, W, L, W, W, W, W, L, W, D, _, _, _],
-    [_, _, _, D, W, L, W, W, W, W, L, W, D, _, _, _],
-    [_, _, _, D, W, L, W, W, W, W, L, W, D, _, _, _],
-    [_, _, _, D, W, L, L, L, L, L, L, W, D, _, _, _],
-    [_, _, _, D, W, W, W, W, W, W, W, W, D, _, _, _],
-    // Handle area
-    [_, _, _, D, W, W, W, W, W, W, W, W, D, _, _, _],
-    [_, _, _, D, W, W, W, W, W, H, H, W, D, _, _, _],
-    [_, _, _, D, W, W, W, W, W, H, H, W, D, _, _, _],
-    [_, _, _, D, W, W, W, W, W, W, W, W, D, _, _, _],
-    // Lower panels
-    [_, _, _, D, W, L, L, L, L, L, L, W, D, _, _, _],
-    [_, _, _, D, W, L, W, W, W, W, L, W, D, _, _, _],
-    [_, _, _, D, W, L, W, W, W, W, L, W, D, _, _, _],
-    [_, _, _, D, W, L, W, W, W, W, L, W, D, _, _, _],
-    [_, _, _, D, W, L, L, L, L, L, L, W, D, _, _, _],
-    [_, _, _, D, W, W, W, W, W, W, W, W, D, _, _, _],
-    [_, _, _, D, W, W, W, W, W, W, W, W, D, _, _, _],
-    [_, _, _, D, W, W, W, W, W, W, W, W, D, _, _, _],
-    [_, _, _, D, W, W, W, W, W, W, W, W, D, _, _, _],
-    [_, _, _, D, W, W, W, W, W, W, W, W, D, _, _, _],
-    // Bottom frame
-    [_, _, _, D, F, F, F, F, F, F, F, F, D, _, _, _],
-    [_, _, _, D, D, D, D, D, D, D, D, D, D, _, _, _],
-    [_, _, _, S, S, S, S, S, S, S, S, S, S, _, _, _],
-  ]
+  // Row structure (32 wide): _,_,_,D,[11 left leaf],D,D,[11 right leaf],D,_,_,_
+  const TF = [_,_,_,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,_,_,_]
+  const FR = [_,_,_,D,F,F,F,F,F,F,F,F,F,F,F,D,D,F,F,F,F,F,F,F,F,F,F,F,D,_,_,_]
+  const SL = [_,_,_,D,W,W,W,W,W,W,W,W,W,W,W,D,D,W,W,W,W,W,W,W,W,W,W,W,D,_,_,_]
+  const TR = [_,_,_,D,W,L,L,L,L,L,L,L,L,L,W,D,D,W,L,L,L,L,L,L,L,L,L,W,D,_,_,_]
+  const DT = [_,_,_,D,W,L,W,W,W,W,W,W,W,L,W,D,D,W,L,W,W,W,W,W,W,W,L,W,D,_,_,_]
+  const HL = [_,_,_,D,W,W,W,W,W,W,W,W,W,H,H,D,D,H,H,W,W,W,W,W,W,W,W,W,D,_,_,_]
+  const SH = [_,_,_,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,_,_,_]
+  return [TF,FR,SL,TR,DT,DT,DT,TR,SL,TR,DT,DT,DT,TR,SL,SL,HL,HL,SL,TR,DT,DT,DT,TR,SL,SL,SL,SL,SL,FR,TF,SH]
 })()
 
-/** Door open (front-facing): 16x32 — open doorway with frame, door panel swung left */
+/** Door open (front-facing): 32x32 — open double doorway, panels swung to sides */
 export const DOOR_OPEN_FRONT_SPRITE: SpriteData = (() => {
   const F = '#8B7355' // frame
   const D = '#6B4E0A' // dark frame edge
   const W = '#A07828' // wood panel (thin edge visible)
   const K = '#2A2A3A' // dark interior
   const S = '#5C4033' // shadow
-  return [
-    // Top frame
-    [_, _, _, D, D, D, D, D, D, D, D, D, D, _, _, _],
-    [_, _, _, D, F, F, F, F, F, F, F, F, D, _, _, _],
-    // Open doorway (dark interior)
-    [_, _, _, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, _, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    [_, _, W, D, K, K, K, K, K, K, K, K, D, _, _, _],
-    // Bottom frame
-    [_, _, _, D, F, F, F, F, F, F, F, F, D, _, _, _],
-    [_, _, _, D, D, D, D, D, D, D, D, D, D, _, _, _],
-    [_, _, _, S, S, S, S, S, S, S, S, S, S, _, _, _],
-  ]
+  const TF = [_,_,_,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,D,_,_,_]
+  const FR = [_,_,_,D,F,F,F,F,F,F,F,F,F,F,F,D,D,F,F,F,F,F,F,F,F,F,F,F,D,_,_,_]
+  const OP = [_,_,_,D,K,K,K,K,K,K,K,K,K,K,K,D,D,K,K,K,K,K,K,K,K,K,K,K,D,_,_,_]
+  const OW = [_,W,_,D,K,K,K,K,K,K,K,K,K,K,K,D,D,K,K,K,K,K,K,K,K,K,K,K,D,_,W,_]
+  const SH = [_,_,_,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,S,_,_,_]
+  return [TF,FR,OP,OP,OW,OW,OW,OW,OW,OW,OW,OW,OW,OW,OW,OW,OW,OW,OW,OW,OW,OW,OW,OW,OW,OW,OW,OW,OW,FR,TF,SH]
 })()
 
-/** Door closed (side-facing): 16x32 — wooden door seen from side */
+/** Door closed (side-facing): 32x32 — thin vertical strip, door seen as profile (blocks left-right corridor) */
 export const DOOR_CLOSED_SIDE_SPRITE: SpriteData = (() => {
   const F = '#8B7355' // frame
   const D = '#6B4E0A' // dark frame edge
   const W = '#A07828' // wood panel
-  const L = '#B8922E' // lighter wood
   const H = '#FFD700' // handle (gold)
   const S = '#5C4033' // shadow
-  return [
-    // Top frame
-    [_, _, _, _, _, _, D, D, D, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, F, F, D, _, _, _, _, _, _],
-    // Door panel (narrow, seen from side)
-    [_, _, _, _, _, _, D, W, W, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, L, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, L, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, W, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, L, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, L, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, W, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, L, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, L, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, W, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, L, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, L, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, W, D, _, _, _, _, _, _],
-    // Handle area
-    [_, _, _, _, _, _, D, W, W, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, H, W, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, H, W, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, W, D, _, _, _, _, _, _],
-    // Lower panels
-    [_, _, _, _, _, _, D, W, L, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, L, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, W, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, L, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, L, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, W, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, W, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, W, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, W, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, W, W, D, _, _, _, _, _, _],
-    // Bottom frame
-    [_, _, _, _, _, _, D, F, F, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, D, D, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, S, S, S, S, _, _, _, _, _, _],
-  ]
+  // 4px wide vertical strip at cols 14-17; rest transparent
+  const TF = [_,_,_,_,_,_,_,_,_,_,_,_,_,_,D,D,D,D,_,_,_,_,_,_,_,_,_,_,_,_,_,_]
+  const FR = [_,_,_,_,_,_,_,_,_,_,_,_,_,_,D,F,F,D,_,_,_,_,_,_,_,_,_,_,_,_,_,_]
+  const WD = [_,_,_,_,_,_,_,_,_,_,_,_,_,_,D,W,W,D,_,_,_,_,_,_,_,_,_,_,_,_,_,_]
+  const HL = [_,_,_,_,_,_,_,_,_,_,_,_,_,_,D,H,W,D,_,_,_,_,_,_,_,_,_,_,_,_,_,_]
+  const SH = [_,_,_,_,_,_,_,_,_,_,_,_,_,_,S,S,S,S,_,_,_,_,_,_,_,_,_,_,_,_,_,_]
+  return [TF,FR,WD,WD,WD,WD,WD,WD,WD,WD,WD,WD,WD,WD,WD,WD,HL,WD,WD,WD,WD,WD,WD,WD,WD,WD,WD,WD,WD,WD,FR,SH]
 })()
 
-/** Door open (side-facing): 16x32 — open doorway seen from side */
+/** Door open (side-facing): 32x32 — thin vertical frame only, door panel swung away */
 export const DOOR_OPEN_SIDE_SPRITE: SpriteData = (() => {
   const F = '#8B7355' // frame
   const D = '#6B4E0A' // dark frame edge
-  const K = '#2A2A3A' // dark interior
-  const W = '#A07828' // wood panel (thin edge visible)
   const S = '#5C4033' // shadow
-  return [
-    // Top frame
-    [_, _, _, _, _, _, D, D, D, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, F, F, D, _, _, _, _, _, _],
-    // Open doorway (dark interior)
-    [_, _, _, _, _, _, D, K, K, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    [_, _, _, _, _, _, D, K, K, D, W, _, _, _, _, _],
-    // Bottom frame
-    [_, _, _, _, _, _, D, F, F, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, D, D, D, D, _, _, _, _, _, _],
-    [_, _, _, _, _, _, S, S, S, S, _, _, _, _, _, _],
-  ]
+  // Same 4px vertical strip, but open (no wood panel — just frame edges)
+  const TF = [_,_,_,_,_,_,_,_,_,_,_,_,_,_,D,D,D,D,_,_,_,_,_,_,_,_,_,_,_,_,_,_]
+  const FR = [_,_,_,_,_,_,_,_,_,_,_,_,_,_,D,F,F,D,_,_,_,_,_,_,_,_,_,_,_,_,_,_]
+  const OP = [_,_,_,_,_,_,_,_,_,_,_,_,_,_,D,_,_,D,_,_,_,_,_,_,_,_,_,_,_,_,_,_]
+  const SH = [_,_,_,_,_,_,_,_,_,_,_,_,_,_,S,S,S,S,_,_,_,_,_,_,_,_,_,_,_,_,_,_]
+  return [TF,FR,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,OP,FR,SH]
 })()
 
 // ── Speech Bubble Sprites ───────────────────────────────────────

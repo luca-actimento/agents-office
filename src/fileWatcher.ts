@@ -4,7 +4,8 @@ import * as vscode from 'vscode';
 import type { AgentState } from './types.js';
 import { cancelWaitingTimer, cancelPermissionTimer, clearAgentActivity } from './timerManager.js';
 import { processTranscriptLine } from './transcriptParser.js';
-import { FILE_WATCHER_POLL_INTERVAL_MS, PROJECT_SCAN_INTERVAL_MS } from './constants.js';
+import { FILE_WATCHER_POLL_INTERVAL_MS, PROJECT_SCAN_INTERVAL_MS, STALE_ACTIVITY_TIMEOUT_MS } from './constants.js';
+import { debugLog } from './debugLog.js';
 
 export function startFileWatching(
 	agentId: number,
@@ -58,7 +59,26 @@ export function readNewLines(
 	if (!agent) return;
 	try {
 		const stat = fs.statSync(agent.jsonlFile);
-		if (stat.size <= agent.fileOffset) return;
+		if (stat.size <= agent.fileOffset) {
+			// No new data — check if agent is stuck active (e.g. killed with ESC)
+			if (!agent.isWaiting) {
+				const staleSecs = Math.round((Date.now() - agent.lastActivityTime) / 1000);
+				if (staleSecs > 0 && staleSecs % 5 === 0) {
+					debugLog(`agent ${agentId}: no new JSONL for ${staleSecs}s (isWaiting=false, hadTools=${agent.hadToolsInTurn}, activeTools=${agent.activeToolIds.size})`);
+				}
+				if (Date.now() - agent.lastActivityTime > STALE_ACTIVITY_TIMEOUT_MS) {
+					debugLog(`agent ${agentId}: STALE → forcing waiting (no JSONL for ${staleSecs}s)`);
+					agent.isWaiting = true;
+					agent.activeToolIds.clear();
+					agent.activeToolStatuses.clear();
+					agent.activeToolNames.clear();
+					agent.hadToolsInTurn = false;
+					webview?.postMessage({ type: 'agentToolsClear', id: agentId });
+					webview?.postMessage({ type: 'agentStatus', id: agentId, status: 'waiting' });
+				}
+			}
+			return;
+		}
 
 		const buf = Buffer.alloc(stat.size - agent.fileOffset);
 		const fd = fs.openSync(agent.jsonlFile, 'r');
@@ -72,7 +92,9 @@ export function readNewLines(
 
 		const hasLines = lines.some(l => l.trim());
 		if (hasLines) {
-			// New data arriving — cancel timers (data flowing means agent is still active)
+			// New data arriving — update activity time, cancel timers
+			debugLog(`agent ${agentId}: new JSONL data (${lines.filter(l => l.trim()).length} lines, offset ${agent.fileOffset})`);
+			agent.lastActivityTime = Date.now();
 			cancelWaitingTimer(agentId, waitingTimers);
 			cancelPermissionTimer(agentId, permissionTimers);
 			if (agent.permissionSent) {
@@ -210,6 +232,7 @@ function adoptTerminalForFile(
 		isWaiting: false,
 		permissionSent: false,
 		hadToolsInTurn: false,
+		lastActivityTime: Date.now(),
 	};
 
 	agents.set(id, agent);

@@ -1,6 +1,7 @@
 import type * as vscode from 'vscode';
 import type { AgentState } from './types.js';
 import { PERMISSION_TIMER_DELAY_MS } from './constants.js';
+import { debugLog } from './debugLog.js';
 
 export function clearAgentActivity(
 	agent: AgentState | undefined,
@@ -46,6 +47,7 @@ export function startWaitingTimer(
 		if (agent) {
 			agent.isWaiting = true;
 		}
+		debugLog(`agent ${agentId}: TEXT_IDLE timer fired → waiting (delay=${delayMs}ms)`);
 		webview?.postMessage({
 			type: 'agentStatus',
 			id: agentId,
@@ -70,7 +72,7 @@ export function startPermissionTimer(
 	agentId: number,
 	agents: Map<number, AgentState>,
 	permissionTimers: Map<number, ReturnType<typeof setTimeout>>,
-	permissionExemptTools: Set<string>,
+	permissionRequiringTools: Set<string>,
 	webview: vscode.Webview | undefined,
 ): void {
 	cancelPermissionTimer(agentId, permissionTimers);
@@ -79,43 +81,23 @@ export function startPermissionTimer(
 		const agent = agents.get(agentId);
 		if (!agent) return;
 
-		// Only flag if there are still active non-exempt tools (parent or sub-agent)
-		let hasNonExempt = false;
+		// Only flag if a permission-requiring tool is still active (not yet completed)
+		let hasStuckTool = false;
 		for (const toolId of agent.activeToolIds) {
 			const toolName = agent.activeToolNames.get(toolId);
-			if (!permissionExemptTools.has(toolName || '')) {
-				hasNonExempt = true;
+			if (permissionRequiringTools.has(toolName || '')) {
+				hasStuckTool = true;
 				break;
 			}
 		}
 
-		// Check sub-agent tools for non-exempt tools
-		const stuckSubagentParentToolIds: string[] = [];
-		for (const [parentToolId, subToolNames] of agent.activeSubagentToolNames) {
-			for (const [, toolName] of subToolNames) {
-				if (!permissionExemptTools.has(toolName)) {
-					stuckSubagentParentToolIds.push(parentToolId);
-					hasNonExempt = true;
-					break;
-				}
-			}
-		}
-
-		if (hasNonExempt) {
+		if (hasStuckTool) {
 			agent.permissionSent = true;
 			console.log(`[Agents Office] Agent ${agentId}: possible permission wait detected`);
 			webview?.postMessage({
 				type: 'agentToolPermission',
 				id: agentId,
 			});
-			// Also notify stuck sub-agents
-			for (const parentToolId of stuckSubagentParentToolIds) {
-				webview?.postMessage({
-					type: 'subagentToolPermission',
-					id: agentId,
-					parentToolId,
-				});
-			}
 		}
 	}, PERMISSION_TIMER_DELAY_MS);
 	permissionTimers.set(agentId, timer);

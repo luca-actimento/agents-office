@@ -18,6 +18,7 @@ import { loadFurnitureAssets, sendAssetsToWebview, loadFloorTiles, sendFloorTile
 import { WORKSPACE_KEY_AGENT_SEATS, GLOBAL_KEY_SOUND_ENABLED } from './constants.js';
 import { writeLayoutToFile, readLayoutFromFile, watchLayoutFile } from './layoutPersistence.js';
 import type { LayoutWatcher } from './layoutPersistence.js';
+import { setDebugLogging } from './debugLog.js';
 
 export class AgentsOfficeViewProvider implements vscode.WebviewViewProvider {
 	nextAgentId = { current: 1 };
@@ -43,7 +44,9 @@ export class AgentsOfficeViewProvider implements vscode.WebviewViewProvider {
 	// Cross-window layout sync
 	layoutWatcher: LayoutWatcher | null = null;
 
-	constructor(private readonly context: vscode.ExtensionContext) {}
+	constructor(private readonly context: vscode.ExtensionContext) {
+		setDebugLogging(true);
+	}
 
 	private get extensionUri(): vscode.Uri {
 		return this.context.extensionUri;
@@ -93,7 +96,7 @@ export class AgentsOfficeViewProvider implements vscode.WebviewViewProvider {
 			} else if (message.type === 'setSoundEnabled') {
 				this.context.globalState.update(GLOBAL_KEY_SOUND_ENABLED, message.enabled);
 			} else if (message.type === 'webviewReady') {
-				restoreAgents(
+				await restoreAgents(
 					this.context,
 					this.nextAgentId, this.nextTerminalIndex,
 					this.agents, this.knownJsonlFiles,
@@ -113,6 +116,64 @@ export class AgentsOfficeViewProvider implements vscode.WebviewViewProvider {
 						folders: wsFolders.map(f => ({ name: f.name, path: f.uri.fsPath })),
 					});
 				}
+
+				// Scan known project directories and send to webview
+				const homeDir = os.homedir();
+				const projects: { name: string; path: string }[] = [];
+
+				// Load projects from central registry (~/.claude/projects-registry.json)
+				const registryPath = path.join(homeDir, '.claude', 'projects-registry.json');
+				let registryLoaded = false;
+				try {
+					const raw = fs.readFileSync(registryPath, 'utf-8');
+					const registry = JSON.parse(raw) as { projects: { key: string; name: string; dir: string }[] };
+					for (const p of registry.projects ?? []) {
+						const dir = p.dir.replace(/^~/, homeDir);
+						try {
+							if (fs.statSync(dir).isDirectory()) {
+								projects.push({ name: p.name, path: dir });
+							}
+						} catch { /* dir doesn't exist, skip */ }
+					}
+					registryLoaded = true;
+				} catch { /* registry missing, fall back to scan */ }
+
+				// Fallback: scan known roots if registry not available
+				if (!registryLoaded) {
+					const scanRoots = [
+						path.join(homeDir, 'Projekte'),
+						path.join(homeDir, 'Work', 'actimento'),
+						path.join(homeDir, 'Work', 'actimento', 'aktive projekte'),
+					];
+					for (const root of scanRoots) {
+						try {
+							const entries = fs.readdirSync(root, { withFileTypes: true });
+							for (const entry of entries) {
+								if (entry.isDirectory()) {
+									projects.push({ name: entry.name, path: path.join(root, entry.name) });
+								}
+							}
+						} catch { /* dir doesn't exist */ }
+					}
+					const standaloneProjects = [path.join(homeDir, 'actimento-hub')];
+					for (const p of standaloneProjects) {
+						try {
+							if (fs.statSync(p).isDirectory()) {
+								projects.push({ name: path.basename(p), path: p });
+							}
+						} catch { /* doesn't exist */ }
+					}
+				}
+
+				// Deduplicate by path
+				const seen = new Set<string>();
+				const uniqueProjects = projects.filter(p => {
+					if (seen.has(p.path)) return false;
+					seen.add(p.path);
+					return true;
+				});
+
+				this.webview?.postMessage({ type: 'projectsList', projects: uniqueProjects });
 
 				// Ensure project scan runs even with no restored agents (to adopt external terminals)
 				const projectDir = getProjectDirPath();
@@ -230,6 +291,24 @@ export class AgentsOfficeViewProvider implements vscode.WebviewViewProvider {
 					})();
 				}
 				sendExistingAgents(this.agents, this.context, this.webview);
+			} else if (message.type === 'pickFolderAndOpenClaude') {
+				const uris = await vscode.window.showOpenDialog({
+					canSelectFolders: true,
+					canSelectFiles: false,
+					canSelectMany: false,
+					openLabel: 'Start Claude here',
+				});
+				if (uris && uris.length > 0) {
+					await launchNewTerminal(
+						this.nextAgentId, this.nextTerminalIndex,
+						this.agents, this.activeAgentId, this.knownJsonlFiles,
+						this.fileWatchers, this.pollingTimers, this.waitingTimers, this.permissionTimers,
+						this.jsonlPollTimers, this.projectScanTimer,
+						this.webview, this.persistAgents,
+						uris[0].fsPath,
+						message.model as string | undefined,
+					);
+				}
 			} else if (message.type === 'furnitureAction') {
 				const actionsFilePath = path.join(os.homedir(), '.agents-office', 'furniture-actions.json');
 				try {
@@ -343,6 +422,15 @@ export class AgentsOfficeViewProvider implements vscode.WebviewViewProvider {
 		const json = JSON.stringify(layout, null, 2);
 		fs.writeFileSync(targetPath, json, 'utf-8');
 		vscode.window.showInformationMessage(`Agents Office: Default layout exported to ${targetPath}`);
+	}
+
+	testSubagent(): void {
+		const parentId = 9999;
+		const toolId = 'test-sub-' + Date.now();
+		this.webview?.postMessage({ type: 'agentToolStart', id: parentId, toolId, status: 'Subtask: Visueller Test 👋' });
+		setTimeout(() => {
+			this.webview?.postMessage({ type: 'agentToolsClear', id: parentId });
+		}, 10000);
 	}
 
 	private startLayoutWatcher(): void {

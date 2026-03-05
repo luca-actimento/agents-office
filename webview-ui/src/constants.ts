@@ -34,6 +34,7 @@ export const MATRIX_TRAIL_MID_THRESHOLD = 0.33
 export const MATRIX_TRAIL_DIM_THRESHOLD = 0.66
 
 // ── Rendering ────────────────────────────────────────────────
+export const SUBAGENT_SCALE = 0.65
 export const CHARACTER_SITTING_OFFSET_PX = 6
 export const CHARACTER_Z_SORT_OFFSET = 0.5
 export const OUTLINE_Z_SORT_OFFSET = 0.001
@@ -96,6 +97,14 @@ export const NOTIFICATION_NOTE_1_START_SEC = 0
 export const NOTIFICATION_NOTE_2_START_SEC = 0.1
 export const NOTIFICATION_NOTE_DURATION_SEC = 0.18
 export const NOTIFICATION_VOLUME = 0.14
+
+// ── Approval Sound ──────────────────────────────────────────
+export const APPROVAL_NOTE_1_HZ = 783.99  // G5
+export const APPROVAL_NOTE_2_HZ = 659.25  // E5
+export const APPROVAL_NOTE_3_HZ = 523.25  // C5
+export const APPROVAL_NOTE_DURATION_SEC = 0.16
+export const APPROVAL_NOTE_GAP_SEC = 0.1
+export const APPROVAL_VOLUME = 0.12
 
 // ── Door Sound ──────────────────────────────────────────────
 export const DOOR_SOUND_FREQ_HZ = 200

@@ -28,6 +28,10 @@
       {
         "command": "agents-office.exportDefaultLayout",
         "title": "Agents Office: Export Layout as Default"
+      },
+      {
+        "command": "agents-office.testSubagent",
+        "title": "Agents Office: Test Subagent (10s)"
       }
     ],
     "viewsContainers": {

@@ -412,7 +412,7 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
       const canvas = canvasRef.current
       if (canvas) {
         let cursor = 'default'
-        if (hitId !== null) {
+        if (hitId !== null && !officeState.characters.get(hitId)?.isMascot) {
           cursor = 'pointer'
         } else if (officeState.selectedAgentId !== null && tile) {
           // Check if hovering over a clickable seat (available or own)
@@ -444,7 +444,7 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
         }
         canvas.style.cursor = cursor
       }
-      officeState.hoveredAgentId = hitId
+      officeState.hoveredAgentId = (hitId !== null && !officeState.characters.get(hitId)?.isMascot) ? hitId : null
     },
     [officeState, screenToWorld, screenToTile, isEditMode, editorState, onEditorTileAction, onEditorEraseAction, panRef, hitTestDeleteButton, hitTestRotateButton, clampPan],
   )
@@ -636,6 +636,8 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
 
       const hitId = officeState.getCharacterAt(pos.worldX, pos.worldY)
       if (hitId !== null) {
+        // Mascots are NPCs — ignore click interactions
+        if (officeState.characters.get(hitId)?.isMascot) return
         // Dismiss any active bubble on click
         officeState.dismissBubble(hitId)
         // Toggle selection: click same agent deselects, different agent selects

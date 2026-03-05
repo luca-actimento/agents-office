@@ -16,29 +16,46 @@ interface ToolOverlayProps {
   onCloseAgent: (id: number) => void
 }
 
+const THINKING_PHRASES = [
+  '\u2733 Thinking\u2026',
+  '\u2733 Pondering\u2026',
+  '\u2733 Brewing\u2026',
+  '\u2733 Whirring\u2026',
+  '\u2733 Churning\u2026',
+  '\u2733 Analyzing\u2026',
+  '\u2733 Considering\u2026',
+  '\u2733 Reflecting\u2026',
+  '\u2733 Synthesizing\u2026',
+  '\u2733 Processing\u2026',
+]
+
+function getThinkingPhrase(): string {
+  return THINKING_PHRASES[Math.floor(Date.now() / 3000) % THINKING_PHRASES.length]
+}
+
 /** Derive a short human-readable activity string from tools/status */
 function getActivityText(
   agentId: number,
   agentTools: Record<number, ToolActivity[]>,
   isActive: boolean,
-): string {
+): { text: string; isThinking: boolean } {
   const tools = agentTools[agentId]
   if (tools && tools.length > 0) {
     // Find the latest non-done tool
     const activeTool = [...tools].reverse().find((t) => !t.done)
     if (activeTool) {
-      if (activeTool.permissionWait) return 'Needs approval'
-      return activeTool.status
+      if (activeTool.permissionWait) return { text: 'Needs approval', isThinking: false }
+      return { text: activeTool.status, isThinking: false }
     }
     // All tools done but agent still active (mid-turn) — keep showing last tool status
     if (isActive) {
       const lastTool = tools[tools.length - 1]
-      if (lastTool) return lastTool.status
+      if (lastTool) return { text: lastTool.status, isThinking: false }
     }
   }
 
-  if (isActive) return 'Thinking\u2026'
-  return 'Idle'
+  if (isActive) return { text: getThinkingPhrase(), isThinking: true }
+  return { text: 'Idle', isThinking: false }
 }
 
 export function ToolOverlay({
@@ -101,6 +118,7 @@ export function ToolOverlay({
         // Get activity text
         const subHasPermission = isSub && ch.bubbleType === 'permission'
         let activityText: string
+        let isThinking = false
         if (isSub) {
           if (subHasPermission) {
             activityText = 'Needs approval'
@@ -109,7 +127,9 @@ export function ToolOverlay({
             activityText = sub ? sub.label : 'Subtask'
           }
         } else {
-          activityText = getActivityText(id, agentTools, ch.isActive)
+          const result = getActivityText(id, agentTools, ch.isActive)
+          activityText = result.text
+          isThinking = result.isThinking
         }
 
         // Determine dot color
@@ -188,7 +208,7 @@ export function ToolOverlay({
                   style={{
                     fontSize: isCompact ? '18px' : isSub ? '20px' : '22px',
                     fontStyle: isSub ? 'italic' : undefined,
-                    color: 'var(--vscode-foreground)',
+                    color: isThinking ? '#e8952a' : 'var(--vscode-foreground)',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     display: 'block',

@@ -197,6 +197,8 @@ export interface Character {
   bubbleType: 'permission' | 'waiting' | null
   /** Countdown timer for bubble (waiting: 2→0, permission: unused) */
   bubbleTimer: number
+  /** Text content for mascot speech bubbles (overrides sprite rendering) */
+  bubbleText?: string
   /** Timer to stay seated while inactive after seat reassignment (counts down to 0) */
   seatTimer: number
   /** Whether this character represents a sub-agent (spawned by Task tool) */

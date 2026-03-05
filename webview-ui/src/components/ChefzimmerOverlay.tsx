@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { OfficeState } from '../office/engine/officeState.js'
 import { TILE_SIZE } from '../constants.js'
 import { CHEFZIMMER_LABEL_COL, CHEFZIMMER_LABEL_ROW, CHEFZIMMER_BUTTON_COL, CHEFZIMMER_BUTTON_ROW } from '../constants.js'
 import { vscode } from '../vscodeApi.js'
+import type { ProjectEntry, WorkspaceFolder } from '../hooks/useExtensionMessages.js'
 
 interface ChefzimmerOverlayProps {
   officeState: OfficeState
@@ -10,6 +11,7 @@ interface ChefzimmerOverlayProps {
   zoom: number
   panRef: React.RefObject<{ x: number; y: number }>
   isEditMode: boolean
+  projects: ProjectEntry[]
 }
 
 function tileToScreen(
@@ -31,15 +33,134 @@ function tileToScreen(
   }
 }
 
+function projectDisplayName(name: string): string {
+  return name.replace(/[-_]/g, ' ')
+}
+
+interface OpusPickerProps {
+  projects: ProjectEntry[]
+  workspaceFolders: WorkspaceFolder[]
+  onClose: () => void
+  anchorX: number
+  anchorY: number
+}
+
+function OpusPicker({ projects, workspaceFolders, onClose, anchorX, anchorY }: OpusPickerProps) {
+  const [hovered, setHovered] = useState<string | null>(null)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose()
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [onClose])
+
+  const handleSelect = (p: { name: string; path: string }) => {
+    onClose()
+    vscode.postMessage({ type: 'openClaude', folderPath: p.path, model: 'opus' })
+  }
+
+  const handleDirect = () => {
+    onClose()
+    vscode.postMessage({ type: 'openClaude', model: 'opus' })
+  }
+
+  const handleBrowse = () => {
+    onClose()
+    vscode.postMessage({ type: 'pickFolderAndOpenClaude', model: 'opus' })
+  }
+
+  const itemStyle = (key: string): React.CSSProperties => ({
+    display: 'block',
+    width: '100%',
+    textAlign: 'left',
+    padding: '6px 10px',
+    fontSize: '20px',
+    color: '#fff',
+    background: hovered === key ? 'rgba(180, 80, 220, 0.4)' : 'transparent',
+    border: 'none',
+    borderRadius: 0,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  })
+
+  const wsPaths = new Set(workspaceFolders.map(f => f.path))
+  const filteredProjects = projects.filter(p => !wsPaths.has(p.path))
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: 'fixed',
+        left: anchorX,
+        top: anchorY,
+        transform: 'translate(-50%, -100%)',
+        background: 'rgba(20, 10, 35, 0.97)',
+        border: '2px solid rgba(200, 120, 255, 0.8)',
+        borderRadius: 0,
+        boxShadow: '0 0 12px rgba(180, 80, 255, 0.4)',
+        minWidth: 200,
+        maxHeight: 300,
+        overflowY: 'auto',
+        zIndex: 50,
+      }}
+    >
+      {/* Direkt im aktuellen Workspace öffnen */}
+      <button
+        onClick={handleDirect}
+        onMouseEnter={() => setHovered('__direct__')}
+        onMouseLeave={() => setHovered(null)}
+        style={{ ...itemStyle('__direct__'), fontWeight: 'bold' }}
+      >
+        ★ Aktueller Workspace
+      </button>
+      {(workspaceFolders.length > 0 || filteredProjects.length > 0) && (
+        <div style={{ borderTop: '1px solid rgba(200,120,255,0.3)', margin: '2px 0' }} />
+      )}
+      {workspaceFolders.length > 0 && (
+        <>
+          <div style={{ padding: '3px 10px', fontSize: '16px', color: 'rgba(200,120,255,0.6)' }}>Workspace</div>
+          {workspaceFolders.map(f => (
+            <button key={f.path} onClick={() => handleSelect(f)} onMouseEnter={() => setHovered(f.path)} onMouseLeave={() => setHovered(null)} style={itemStyle(f.path)}>
+              {f.name}
+            </button>
+          ))}
+        </>
+      )}
+      {filteredProjects.length > 0 && (
+        <>
+          <div style={{ padding: '3px 10px', fontSize: '16px', color: 'rgba(200,120,255,0.6)' }}>Projekte</div>
+          {filteredProjects.map(p => (
+            <button key={p.path} onClick={() => handleSelect(p)} onMouseEnter={() => setHovered(p.path)} onMouseLeave={() => setHovered(null)} style={itemStyle(p.path)}>
+              {projectDisplayName(p.name)}
+            </button>
+          ))}
+        </>
+      )}
+      <div style={{ borderTop: '1px solid rgba(200,120,255,0.3)', margin: '2px 0' }} />
+      <button onClick={handleBrowse} onMouseEnter={() => setHovered('__browse__')} onMouseLeave={() => setHovered(null)} style={itemStyle('__browse__')}>
+        Browse...
+      </button>
+    </div>
+  )
+}
+
 export function ChefzimmerOverlay({
   officeState,
   containerRef,
   zoom,
   panRef,
   isEditMode,
+  projects,
 }: ChefzimmerOverlayProps) {
   const [, setTick] = useState(0)
-  const [hovered, setHovered] = useState(false)
+  const [hovered, setHovered] = useState<'opus' | 'arrow' | null>(null)
+  const [isPickerOpen, setIsPickerOpen] = useState(false)
+  const [pickerAnchor, setPickerAnchor] = useState({ x: 0, y: 0 })
 
   // Re-render each frame to track pan/zoom
   useEffect(() => {
@@ -69,6 +190,15 @@ export function ChefzimmerOverlay({
     vscode.postMessage({ type: 'openClaude', model: 'opus' })
   }
 
+  const handleArrowClick = (e: React.MouseEvent) => {
+    const groupEl = (e.currentTarget as HTMLElement).closest('[data-opus-group]') as HTMLElement
+    const rect = groupEl ? groupEl.getBoundingClientRect() : (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setPickerAnchor({ x: rect.left + rect.width / 2, y: rect.top - 4 })
+    setIsPickerOpen((v) => !v)
+  }
+
+  // Workspace folders not available here, Projects button in toolbar covers that
+  const workspaceFolders: WorkspaceFolder[] = []
 
   return (
     <>
@@ -96,37 +226,75 @@ export function ChefzimmerOverlay({
         </div>
       )}
 
-      {/* Opus Button over green table */}
-      <button
-        onClick={handleOpusClick}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+      {/* Opus Button + Picker-Arrow nebeneinander */}
+      <div
+        data-opus-group="1"
         style={{
           position: 'absolute',
           left: buttonPos.x,
           top: buttonPos.y,
           transform: 'translate(-50%, -50%)',
           zIndex: 36,
-          cursor: 'pointer',
-          fontSize: '18px',
-          padding: '3px 10px',
-          color: '#fff',
-          background: hovered
-            ? 'rgba(180, 80, 220, 0.95)'
-            : 'rgba(140, 50, 180, 0.85)',
-          border: '2px solid rgba(200, 120, 255, 0.8)',
-          borderRadius: 0,
-          boxShadow: hovered
-            ? '0 0 8px rgba(180, 80, 255, 0.6)'
-            : '2px 2px 0px #0a0a14',
-          whiteSpace: 'nowrap',
-          letterSpacing: '0.5px',
-          transition: 'background 0.15s, box-shadow 0.15s',
+          display: 'flex',
+          alignItems: 'stretch',
         }}
-        title="Start Opus terminal in Chefzimmer"
       >
-        + Opus
-      </button>
+        <button
+          onClick={handleOpusClick}
+          onMouseEnter={() => setHovered('opus')}
+          onMouseLeave={() => setHovered(null)}
+          style={{
+            cursor: 'pointer',
+            fontSize: '18px',
+            padding: '3px 10px',
+            color: '#fff',
+            background: hovered === 'opus'
+              ? 'rgba(180, 80, 220, 0.95)'
+              : 'rgba(140, 50, 180, 0.85)',
+            border: '2px solid rgba(200, 120, 255, 0.8)',
+            borderRight: 'none',
+            borderRadius: 0,
+            boxShadow: hovered === 'opus' ? '0 0 8px rgba(180, 80, 255, 0.6)' : 'none',
+            whiteSpace: 'nowrap',
+            letterSpacing: '0.5px',
+            transition: 'background 0.15s',
+          }}
+          title="Opus-Agent im aktuellen Workspace starten"
+        >
+          + Opus
+        </button>
+        <button
+          onClick={handleArrowClick}
+          onMouseEnter={() => setHovered('arrow')}
+          onMouseLeave={() => setHovered(null)}
+          style={{
+            cursor: 'pointer',
+            fontSize: '13px',
+            padding: '3px 5px',
+            color: '#fff',
+            background: hovered === 'arrow' || isPickerOpen
+              ? 'rgba(180, 80, 220, 0.95)'
+              : 'rgba(140, 50, 180, 0.85)',
+            border: '2px solid rgba(200, 120, 255, 0.8)',
+            borderRadius: 0,
+            boxShadow: hovered === 'arrow' || isPickerOpen ? '0 0 8px rgba(180, 80, 255, 0.6)' : 'none',
+            transition: 'background 0.15s',
+          }}
+          title="Projekt auswählen"
+        >
+          ▾
+        </button>
+      </div>
+
+      {isPickerOpen && (
+        <OpusPicker
+          projects={projects}
+          workspaceFolders={workspaceFolders}
+          onClose={() => setIsPickerOpen(false)}
+          anchorX={pickerAnchor.x}
+          anchorY={pickerAnchor.y}
+        />
+      )}
     </>
   )
 }

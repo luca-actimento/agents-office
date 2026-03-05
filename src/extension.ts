@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { AgentsOfficeViewProvider } from './AgentsOfficeViewProvider.js';
-import { VIEW_ID, COMMAND_SHOW_PANEL, COMMAND_EXPORT_DEFAULT_LAYOUT } from './constants.js';
+import { VIEW_ID, COMMAND_SHOW_PANEL, COMMAND_EXPORT_DEFAULT_LAYOUT, COMMAND_TEST_SUBAGENT } from './constants.js';
 import { checkForUpdate } from './updateChecker.js';
 
 let providerInstance: AgentsOfficeViewProvider | undefined;
@@ -26,6 +26,12 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.commands.registerCommand(COMMAND_EXPORT_DEFAULT_LAYOUT, () => {
 			provider.exportDefaultLayout();
+		})
+	);
+
+	context.subscriptions.push(
+		vscode.commands.registerCommand(COMMAND_TEST_SUBAGENT, () => {
+			provider.testSubagent();
 		})
 	);
 }

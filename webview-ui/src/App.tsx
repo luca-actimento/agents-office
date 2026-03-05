@@ -14,6 +14,7 @@ import { useEditorKeyboard } from './hooks/useEditorKeyboard.js'
 import { ZoomControls } from './components/ZoomControls.js'
 import { BottomToolbar } from './components/BottomToolbar.js'
 import { ChefzimmerOverlay } from './components/ChefzimmerOverlay.js'
+import { MascotBubble } from './components/MascotBubble.js'
 import { DebugView } from './components/DebugView.js'
 // Plugins
 import { FurnitureCatalogPanel } from './plugins/furnitureCatalog/FurnitureCatalogPanel.js'
@@ -125,7 +126,7 @@ function App() {
 
   const isEditDirty = useCallback(() => editor.isEditMode && editor.isDirty, [editor.isEditMode, editor.isDirty])
 
-  const { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
+  const { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders, projects } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
 
   const [isDebugMode, setIsDebugMode] = useState(false)
   const [isCatalogOpen, setIsCatalogOpen] = useState(false)
@@ -245,11 +246,11 @@ function App() {
 
       <BottomToolbar
         isEditMode={editor.isEditMode}
-        onOpenClaude={editor.handleOpenClaude}
         onToggleEditMode={editor.handleToggleEditMode}
         isDebugMode={isDebugMode}
         onToggleDebugMode={handleToggleDebugMode}
         workspaceFolders={workspaceFolders}
+        projects={projects}
         isCatalogOpen={isCatalogOpen}
         onToggleCatalog={handleToggleCatalog}
       />
@@ -320,6 +321,14 @@ function App() {
         zoom={editor.zoom}
         panRef={editor.panRef}
         isEditMode={editor.isEditMode}
+        projects={projects}
+      />
+
+      <MascotBubble
+        officeState={officeState}
+        containerRef={containerRef}
+        zoom={editor.zoom}
+        panRef={editor.panRef}
       />
 
       <ToolOverlay

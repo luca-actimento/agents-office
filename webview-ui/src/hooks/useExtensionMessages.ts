@@ -8,7 +8,7 @@ import { setFloorSprites } from '../office/floorTiles.js'
 import { setWallSprites } from '../office/wallTiles.js'
 import { setCharacterTemplates } from '../office/sprites/spriteData.js'
 import { vscode } from '../vscodeApi.js'
-import { playDoneSound, setSoundEnabled } from '../notificationSound.js'
+import { playDoneSound, playApprovalSound, setSoundEnabled, playThinkingSound, playSubagentSpawnSound, playSubagentDoneSound } from '../notificationSound.js'
 
 export interface SubagentCharacter {
   id: number
@@ -40,6 +40,11 @@ export interface WorkspaceFolder {
   path: string
 }
 
+export interface ProjectEntry {
+  name: string
+  path: string
+}
+
 export interface ExtensionMessageState {
   agents: number[]
   selectedAgent: number | null
@@ -50,6 +55,7 @@ export interface ExtensionMessageState {
   layoutReady: boolean
   loadedAssets?: { catalog: FurnitureAsset[]; sprites: Record<string, string[][]> }
   workspaceFolders: WorkspaceFolder[]
+  projects: ProjectEntry[]
 }
 
 function saveAgentSeats(os: OfficeState): void {
@@ -75,9 +81,12 @@ export function useExtensionMessages(
   const [layoutReady, setLayoutReady] = useState(false)
   const [loadedAssets, setLoadedAssets] = useState<{ catalog: FurnitureAsset[]; sprites: Record<string, string[][]> } | undefined>()
   const [workspaceFolders, setWorkspaceFolders] = useState<WorkspaceFolder[]>([])
+  const [projects, setProjects] = useState<ProjectEntry[]>([])
 
   // Track whether initial layout has been loaded (ref to avoid re-render)
   const layoutReadyRef = useRef(false)
+  // Track previous agent status to detect waiting→active transitions
+  const prevAgentStatusRef = useRef<Record<number, string>>({})
 
   useEffect(() => {
     // Buffer agents from existingAgents until layout is loaded
@@ -180,13 +189,14 @@ export function useExtensionMessages(
         os.setAgentActive(id, true)
         os.clearPermissionBubble(id)
         // Create sub-agent character for Task tool subtasks
-        if (status.startsWith('Subtask:')) {
-          const label = status.slice('Subtask:'.length).trim()
+        if (status.startsWith('Subtask:') || status === 'Running subtask') {
+          const label = status.startsWith('Subtask:') ? status.slice('Subtask:'.length).trim() : 'Subtask'
           const subId = os.addSubagent(id, toolId)
           setSubagentCharacters((prev) => {
             if (prev.some((s) => s.id === subId)) return prev
             return [...prev, { id: subId, parentAgentId: id, parentToolId: toolId, label }]
           })
+          playSubagentSpawnSound()
         }
       } else if (msg.type === 'agentToolDone') {
         const id = msg.id as number
@@ -239,6 +249,13 @@ export function useExtensionMessages(
         if (status === 'waiting') {
           os.showWaitingBubble(id)
           playDoneSound()
+          prevAgentStatusRef.current[id] = 'waiting'
+        } else if (status === 'active') {
+          // Only play thinking sound when transitioning from waiting (new turn), not on tool calls
+          if (prevAgentStatusRef.current[id] === 'waiting') {
+            playThinkingSound()
+          }
+          prevAgentStatusRef.current[id] = 'active'
         }
       } else if (msg.type === 'agentToolPermission') {
         const id = msg.id as number
@@ -251,6 +268,7 @@ export function useExtensionMessages(
           }
         })
         os.showPermissionBubble(id)
+        playApprovalSound()
       } else if (msg.type === 'subagentToolPermission') {
         const id = msg.id as number
         const parentToolId = msg.parentToolId as string
@@ -313,6 +331,7 @@ export function useExtensionMessages(
       } else if (msg.type === 'subagentClear') {
         const id = msg.id as number
         const parentToolId = msg.parentToolId as string
+        playSubagentDoneSound()
         setSubagentTools((prev) => {
           const agentSubs = prev[id]
           if (!agentSubs || !(parentToolId in agentSubs)) return prev
@@ -343,6 +362,8 @@ export function useExtensionMessages(
       } else if (msg.type === 'workspaceFolders') {
         const folders = msg.folders as WorkspaceFolder[]
         setWorkspaceFolders(folders)
+      } else if (msg.type === 'projectsList') {
+        setProjects(msg.projects as ProjectEntry[])
       } else if (msg.type === 'settingsLoaded') {
         const soundOn = msg.soundEnabled as boolean
         setSoundEnabled(soundOn)
@@ -364,5 +385,5 @@ export function useExtensionMessages(
     return () => window.removeEventListener('message', handler)
   }, [getOfficeState])
 
-  return { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders }
+  return { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders, projects }
 }

@@ -7,6 +7,7 @@ import { renderMatrixEffect } from './matrixEffect.js'
 import { getColorizedFloorSprite, hasFloorSprites, WALL_COLOR } from '../floorTiles.js'
 import { hasWallSprites, getWallInstances, wallColorToHex } from '../wallTiles.js'
 import {
+  SUBAGENT_SCALE,
   CHARACTER_SITTING_OFFSET_PX,
   CHARACTER_Z_SORT_OFFSET,
   OUTLINE_Z_SORT_OFFSET,
@@ -124,7 +125,9 @@ export function renderScene(
   for (const ch of characters) {
     const sprites = getCharacterSprites(ch.palette, ch.hueShift)
     const spriteData = getCharacterSprite(ch, sprites)
-    const cached = getCachedSprite(spriteData, zoom)
+    // Subagents are rendered at a reduced scale so they're visually smaller
+    const charZoom = ch.isSubagent ? zoom * SUBAGENT_SCALE : zoom
+    const cached = getCachedSprite(spriteData, charZoom)
     // Sitting offset: shift character down when seated so they visually sit in the chair
     const sittingOffset = ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0
     // Anchor at bottom-center of character — round to integer device pixels
@@ -142,10 +145,11 @@ export function renderScene(
       const mDrawY = drawY
       const mSpriteData = spriteData
       const mCh = ch
+      const mCharZoom = charZoom
       drawables.push({
         zY: charZY,
         draw: (c) => {
-          renderMatrixEffect(c, mCh, mSpriteData, mDrawX, mDrawY, zoom)
+          renderMatrixEffect(c, mCh, mSpriteData, mDrawX, mDrawY, mCharZoom)
         },
       })
       continue
@@ -157,9 +161,9 @@ export function renderScene(
     if (isSelected || isHovered) {
       const outlineAlpha = isSelected ? SELECTED_OUTLINE_ALPHA : HOVERED_OUTLINE_ALPHA
       const outlineData = getOutlineSprite(spriteData)
-      const outlineCached = getCachedSprite(outlineData, zoom)
-      const olDrawX = drawX - zoom  // 1 sprite-pixel offset, scaled
-      const olDrawY = drawY - zoom  // outline follows sitting offset via drawY
+      const outlineCached = getCachedSprite(outlineData, charZoom)
+      const olDrawX = drawX - charZoom  // 1 sprite-pixel offset, scaled
+      const olDrawY = drawY - charZoom  // outline follows sitting offset via drawY
       drawables.push({
         zY: charZY - OUTLINE_Z_SORT_OFFSET, // sort just before character
         draw: (c) => {
@@ -458,10 +462,6 @@ export function renderBubbles(
   for (const ch of characters) {
     if (!ch.bubbleType) continue
 
-    const sprite = ch.bubbleType === 'permission'
-      ? BUBBLE_PERMISSION_SPRITE
-      : BUBBLE_WAITING_SPRITE
-
     // Compute opacity: permission = blink, waiting = fade in last 0.5s
     let alpha = 1.0
     if (ch.bubbleType === 'permission') {
@@ -474,19 +474,86 @@ export function renderBubbles(
       alpha = ch.bubbleTimer / BUBBLE_FADE_DURATION_SEC
     }
 
-    const cached = getCachedSprite(sprite, zoom)
-    // Position: centered above the character's head
-    // Character is anchored bottom-center at (ch.x, ch.y), sprite is 16x24
-    // Place bubble above head with a small gap; follow sitting offset
-    const sittingOff = ch.state === CharacterState.TYPE ? BUBBLE_SITTING_OFFSET_PX : 0
-    const bubbleX = Math.round(offsetX + ch.x * zoom - cached.width / 2)
-    const bubbleY = Math.round(offsetY + (ch.y + sittingOff - BUBBLE_VERTICAL_OFFSET_PX) * zoom - cached.height - 1 * zoom)
+    // Mascot bubbles are rendered as HTML (see MascotBubble component) to stay above overlays
+    if (ch.isMascot) continue
 
-    ctx.save()
-    if (alpha < 1.0) ctx.globalAlpha = alpha
-    ctx.drawImage(cached, bubbleX, bubbleY)
-    ctx.restore()
+    const sittingOff = ch.state === CharacterState.TYPE ? BUBBLE_SITTING_OFFSET_PX : 0
+    const charPixelX = Math.round(offsetX + ch.x * zoom)
+    const charHeadY = Math.round(offsetY + (ch.y + sittingOff - BUBBLE_VERTICAL_OFFSET_PX) * zoom)
+
+    if (ch.bubbleText) {
+      // Text speech bubble for mascot
+      renderTextBubble(ctx, ch.bubbleText, charPixelX, charHeadY, alpha, zoom)
+    } else {
+      // Sprite bubble (checkmark / permission)
+      const sprite = ch.bubbleType === 'permission'
+        ? BUBBLE_PERMISSION_SPRITE
+        : BUBBLE_WAITING_SPRITE
+      const cached = getCachedSprite(sprite, zoom)
+      const bubbleX = Math.round(charPixelX - cached.width / 2)
+      const bubbleY = Math.round(charHeadY - cached.height - 1 * zoom)
+      ctx.save()
+      if (alpha < 1.0) ctx.globalAlpha = alpha
+      ctx.drawImage(cached, bubbleX, bubbleY)
+      ctx.restore()
+    }
   }
+}
+
+function renderTextBubble(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  cx: number,
+  headY: number,
+  alpha: number,
+  zoom: number,
+): void {
+  const fontSize = Math.max(9, Math.round(7 * zoom))
+  ctx.save()
+  ctx.globalAlpha = alpha
+  ctx.font = `${fontSize}px "Segoe UI", system-ui, sans-serif`
+
+  const padding = Math.round(4 * zoom)
+  const tailH = Math.round(5 * zoom)
+  const r = Math.round(4 * zoom) // corner radius
+  const metrics = ctx.measureText(text)
+  const w = Math.ceil(metrics.width) + padding * 2
+  const h = fontSize + padding * 2
+
+  const bx = Math.round(cx - w / 2)
+  const by = Math.round(headY - h - tailH - 2 * zoom)
+
+  // Background rounded rect
+  ctx.fillStyle = '#EEEEFF'
+  ctx.strokeStyle = '#555566'
+  ctx.lineWidth = Math.max(1, zoom * 0.5)
+  ctx.beginPath()
+  ctx.roundRect(bx, by, w, h, r)
+  ctx.fill()
+  ctx.stroke()
+
+  // Tail (triangle pointing down)
+  ctx.beginPath()
+  ctx.moveTo(cx - Math.round(4 * zoom), by + h)
+  ctx.lineTo(cx + Math.round(4 * zoom), by + h)
+  ctx.lineTo(cx, by + h + tailH)
+  ctx.closePath()
+  ctx.fillStyle = '#EEEEFF'
+  ctx.fill()
+  // Tail border (left + right sides only, not bottom gap)
+  ctx.strokeStyle = '#555566'
+  ctx.beginPath()
+  ctx.moveTo(cx - Math.round(4 * zoom), by + h)
+  ctx.lineTo(cx, by + h + tailH)
+  ctx.lineTo(cx + Math.round(4 * zoom), by + h)
+  ctx.stroke()
+
+  // Text
+  ctx.fillStyle = '#333344'
+  ctx.textBaseline = 'top'
+  ctx.fillText(text, bx + padding, by + padding)
+
+  ctx.restore()
 }
 
 export interface ButtonBounds {

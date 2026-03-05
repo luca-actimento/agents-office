@@ -52,10 +52,10 @@ export const FURNITURE_CATALOG: CatalogEntryWithCategory[] = [
   { type: FurnitureType.PC,         label: 'PC',         footprintW: 1, footprintH: 1, sprite: PC_SPRITE,           isDesk: false, category: 'electronics' },
   { type: FurnitureType.LAMP,       label: 'Lamp',       footprintW: 1, footprintH: 1, sprite: LAMP_SPRITE,         isDesk: false, category: 'decor' },
   // ── Doors ──
-  { type: FurnitureType.DOOR_FRONT_CLOSED, label: 'Door',             footprintW: 1, footprintH: 2, sprite: DOOR_CLOSED_FRONT_SPRITE, isDesk: false, category: 'misc', groupId: 'door_front', orientation: 'front', state: 'off' },
-  { type: FurnitureType.DOOR_FRONT_OPEN,   label: 'Door - Open',      footprintW: 1, footprintH: 2, sprite: DOOR_OPEN_FRONT_SPRITE,   isDesk: false, category: 'misc', groupId: 'door_front', orientation: 'front', state: 'on' },
-  { type: FurnitureType.DOOR_SIDE_CLOSED,  label: 'Door - Side',      footprintW: 1, footprintH: 2, sprite: DOOR_CLOSED_SIDE_SPRITE,  isDesk: false, category: 'misc', groupId: 'door_side',  orientation: 'right', state: 'off' },
-  { type: FurnitureType.DOOR_SIDE_OPEN,    label: 'Door - Side Open', footprintW: 1, footprintH: 2, sprite: DOOR_OPEN_SIDE_SPRITE,    isDesk: false, category: 'misc', groupId: 'door_side',  orientation: 'right', state: 'on' },
+  { type: FurnitureType.DOOR_FRONT_CLOSED, label: 'Door',             footprintW: 2, footprintH: 2, sprite: DOOR_CLOSED_FRONT_SPRITE, isDesk: false, category: 'misc', groupId: 'door_front', orientation: 'front', state: 'off' },
+  { type: FurnitureType.DOOR_FRONT_OPEN,   label: 'Door - Open',      footprintW: 2, footprintH: 2, sprite: DOOR_OPEN_FRONT_SPRITE,   isDesk: false, category: 'misc', groupId: 'door_front', orientation: 'front', state: 'on' },
+  { type: FurnitureType.DOOR_SIDE_CLOSED,  label: 'Door - Side',      footprintW: 2, footprintH: 2, sprite: DOOR_CLOSED_SIDE_SPRITE,  isDesk: false, category: 'misc', groupId: 'door_side',  orientation: 'right', state: 'off' },
+  { type: FurnitureType.DOOR_SIDE_OPEN,    label: 'Door - Side Open', footprintW: 2, footprintH: 2, sprite: DOOR_OPEN_SIDE_SPRITE,    isDesk: false, category: 'misc', groupId: 'door_side',  orientation: 'right', state: 'on' },
 
 ]
 

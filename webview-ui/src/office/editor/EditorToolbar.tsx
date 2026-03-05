@@ -205,8 +205,17 @@ export function EditorToolbar({
 
   const thumbSize = 36 // 2x for items
 
-  const isFloorActive = activeTool === EditTool.TILE_PAINT || activeTool === EditTool.EYEDROPPER
-  const isWallActive = activeTool === EditTool.WALL_PAINT
+  // Track which sub-panel was active before switching to eyedropper
+  const prevToolRef = useRef<typeof activeTool>(activeTool)
+  useEffect(() => {
+    if (activeTool !== EditTool.EYEDROPPER) {
+      prevToolRef.current = activeTool
+    }
+  }, [activeTool])
+
+  const eyedropperFromWall = activeTool === EditTool.EYEDROPPER && prevToolRef.current === EditTool.WALL_PAINT
+  const isFloorActive = activeTool === EditTool.TILE_PAINT || (activeTool === EditTool.EYEDROPPER && !eyedropperFromWall)
+  const isWallActive = activeTool === EditTool.WALL_PAINT || eyedropperFromWall
   const isEraseActive = activeTool === EditTool.ERASE
   const isFurnitureActive = activeTool === EditTool.FURNITURE_PLACE || activeTool === EditTool.FURNITURE_PICK
 
@@ -317,7 +326,7 @@ export function EditorToolbar({
       {/* Sub-panel: Wall — stacked bottom-to-top via column-reverse */}
       {isWallActive && (
         <div style={{ display: 'flex', flexDirection: 'column-reverse', gap: 6 }}>
-          {/* Color toggle — just above tool row */}
+          {/* Color toggle + Pick — just above tool row */}
           <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
             <button
               style={showWallColor ? activeBtnStyle : btnStyle}
@@ -325,6 +334,13 @@ export function EditorToolbar({
               title="Adjust wall color"
             >
               Color
+            </button>
+            <button
+              style={activeTool === EditTool.EYEDROPPER ? activeBtnStyle : btnStyle}
+              onClick={() => onToolChange(EditTool.EYEDROPPER)}
+              title="Pick wall color from existing tile"
+            >
+              Pick
             </button>
           </div>
 

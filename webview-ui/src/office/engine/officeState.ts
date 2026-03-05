@@ -14,8 +14,50 @@ import {
   CHARACTER_HIT_HALF_WIDTH,
   CHARACTER_HIT_HEIGHT,
   CAFE_BREW_DURATION_SEC,
+  CHEFZIMMER_BUTTON_COL,
+  CHEFZIMMER_BUTTON_ROW,
 } from '../../constants.js'
 import type { Character, Seat, FurnitureInstance, TileType as TileTypeVal, OfficeLayout, PlacedFurniture } from '../types.js'
+
+const MASCOT_BUBBLE_DURATION_SEC = 8.0
+
+const MASCOT_MESSAGES = [
+  'Alles unter Kontrolle! 👌',
+  'Tippe, tippe, tippe...',
+  'Noch 5 Minuten, versprochen.',
+  'Das steht so in keinem Handbuch.',
+  'Ich lerne noch. 🤓',
+  'Context Window: fast voll.',
+  'Halluziniere ich gerade? Nein.',
+  'Kaffee wäre jetzt nice.',
+  'Hm, interessanter Prompt.',
+  'Arbeite hart. Oder klug. Beides.',
+  '99 Probleme, aber ein Bug ist keins.',
+  'Läuft bei mir! (lokal)',
+  'Das war so gewollt.',
+  'Manche nennen es Bug, ich: Feature.',
+  'Sag mal... hörst du das auch?',
+  'Bitte nicht unterbrechen, ich denke.',
+  'Stack Overflow hat auch nichts.',
+  'Hab ich schon mal gemacht. Fast.',
+  'Deadline? Kenn ich nicht.',
+  'Das ist kein Bug, das ist Jazz.',
+  'Wer hat an meinen Tokens gedreht?',
+  'Gerade 3 Tabs offen. Rekord.',
+  'Ich bin offiziell im Flow.',
+  'Einfach mal committen und schauen.',
+  'Laut Doku sollte das funktionieren.',
+  'Fehler 404: Motivation not found.',
+  'Hab den Fix. Bin gleich zurück.',
+  'Manchmal träume ich in JSON.',
+  'Wer braucht schon Schlaf.',
+  'Update: es war doch der Cache.',
+  'Ich bin kein Roboter. Meistens.',
+  'Das reviewt sich nicht selbst.',
+  'Attention is all you need. Auch Kaffee.',
+  'Wo ist eigentlich der Papierkram?',
+  'Nur noch eine Funktion.',
+]
 import { createCharacter, updateCharacter } from './characters.js'
 import { matrixEffectSeeds } from './matrixEffect.js'
 import { isWalkable, getWalkableTiles, findPath } from '../layout/tileMap.js'
@@ -37,6 +79,8 @@ export class OfficeState {
   furniture: FurnitureInstance[]
   walkableTiles: Array<{ col: number; row: number }>
   private cafeWalkableTiles: Array<{ col: number; row: number }> = []
+  private mascotWalkableTiles: Array<{ col: number; row: number }> = []
+  private mascotBlockedTiles: Set<string> = new Set()
   private cafeSeatIds: string[] = []
   characters: Map<number, Character> = new Map()
   selectedAgentId: number | null = null
@@ -54,7 +98,7 @@ export class OfficeState {
 
   /** Mascot config: each entry defines a permanent NPC in the office */
   static readonly MASCOTS = [
-    { id: OfficeState.MASCOT_ACTIMENTO_ID, palette: 6, col: 6, row: 2, dir: Direction.DOWN, label: 'Actimento' },
+    { id: OfficeState.MASCOT_ACTIMENTO_ID, palette: 6, col: 18, row: 4, dir: Direction.DOWN, label: 'Actimento' },
   ] as const
 
   constructor(layout?: OfficeLayout) {
@@ -65,6 +109,8 @@ export class OfficeState {
     this.furniture = layoutToFurnitureInstances(this.layout.furniture)
     this.walkableTiles = getWalkableTiles(this.tileMap, this.blockedTiles)
     this.cafeWalkableTiles = this.buildCafeWalkableTiles()
+    this.mascotWalkableTiles = this.buildMascotWalkableTiles()
+    this.mascotBlockedTiles = this.buildMascotBlockedTiles()
     this.cafeSeatIds = this.buildCafeSeatIds()
     this.initMascots()
   }
@@ -74,15 +120,27 @@ export class OfficeState {
     for (const m of OfficeState.MASCOTS) {
       if (this.characters.has(m.id)) continue
       const ch = createCharacter(m.id, m.palette, null, null, 0)
-      ch.x = m.col * TILE_SIZE + TILE_SIZE / 2
-      ch.y = m.row * TILE_SIZE + TILE_SIZE / 2
-      ch.tileCol = m.col
-      ch.tileRow = m.row
+
+      // Spawn in the mascot wander zone (bottom-right), fall back to any walkable tile
+      const spawnPool = this.mascotWalkableTiles.length >= 4
+        ? this.mascotWalkableTiles
+        : (this.walkableTiles.length > 0 ? this.walkableTiles : null)
+      const spawn = spawnPool
+        ? spawnPool[Math.floor(Math.random() * spawnPool.length)]
+        : { col: m.col, row: m.row }
+
+      ch.x = spawn.col * TILE_SIZE + TILE_SIZE / 2
+      ch.y = spawn.row * TILE_SIZE + TILE_SIZE / 2
+      ch.tileCol = spawn.col
+      ch.tileRow = spawn.row
       ch.dir = m.dir
-      ch.state = CharacterState.TYPE
-      ch.isActive = true
+      ch.state = CharacterState.IDLE
+      ch.isActive = false
       ch.isMascot = true
       ch.folderName = m.label
+      ch.wanderTimer = 1 + Math.random() * 3
+      // cafeBrewTimer repurposed as bubble cooldown for mascots
+      ch.cafeBrewTimer = 5 + Math.random() * 10
       this.characters.set(m.id, ch)
     }
   }
@@ -97,6 +155,8 @@ export class OfficeState {
     this.rebuildFurnitureInstances()
     this.walkableTiles = getWalkableTiles(this.tileMap, this.blockedTiles)
     this.cafeWalkableTiles = this.buildCafeWalkableTiles()
+    this.mascotWalkableTiles = this.buildMascotWalkableTiles()
+    this.mascotBlockedTiles = this.buildMascotBlockedTiles()
     this.cafeSeatIds = this.buildCafeSeatIds()
 
     // Shift character positions when grid expands left/up
@@ -115,6 +175,20 @@ export class OfficeState {
     // Reassign characters to new seats, preserving existing assignments when possible
     for (const seat of this.seats.values()) {
       seat.assigned = false
+    }
+
+    // Re-position mascots into the (now updated) wander zone
+    for (const ch of this.characters.values()) {
+      if (!ch.isMascot) continue
+      const pool = this.mascotWalkableTiles.length >= 4 ? this.mascotWalkableTiles : this.walkableTiles
+      if (pool.length === 0) continue
+      const spawn = pool[Math.floor(Math.random() * pool.length)]
+      ch.tileCol = spawn.col
+      ch.tileRow = spawn.row
+      ch.x = spawn.col * TILE_SIZE + TILE_SIZE / 2
+      ch.y = spawn.row * TILE_SIZE + TILE_SIZE / 2
+      ch.path = []
+      ch.moveProgress = 0
     }
 
     // First pass: try to keep characters at their existing seats (skip mascots)
@@ -140,6 +214,7 @@ export class OfficeState {
 
     // Second pass: assign remaining characters to free seats
     for (const ch of this.characters.values()) {
+      if (ch.isMascot) continue // mascots have fixed positions, not seats
       if (ch.seatId) continue
       const seatId = this.findFreeSeat()
       if (seatId) {
@@ -183,6 +258,28 @@ export class OfficeState {
       t.col >= zone.colMin && t.col <= zone.colMax &&
       t.row >= zone.rowMin && t.row <= zone.rowMax
     )
+  }
+
+  /** Build walkable tiles for the Chefzimmer (mascot wander zone) */
+  private buildMascotWalkableTiles(): Array<{ col: number; row: number }> {
+    // Zone anchored to Chefzimmer button position (col 16, row 17)
+    const minCol = CHEFZIMMER_BUTTON_COL - 4
+    const minRow = CHEFZIMMER_BUTTON_ROW - 1
+    const zone = this.walkableTiles.filter(t => t.col >= minCol && t.row >= minRow)
+    return zone.length >= 4 ? zone : this.walkableTiles
+  }
+
+  /** Blocked tiles for mascot pathfinding: everything outside the Chefzimmer zone is blocked */
+  private buildMascotBlockedTiles(): Set<string> {
+    const minCol = CHEFZIMMER_BUTTON_COL - 4
+    const minRow = CHEFZIMMER_BUTTON_ROW - 1
+    const blocked = new Set(this.blockedTiles)
+    for (const t of this.walkableTiles) {
+      if (t.col < minCol || t.row < minRow) {
+        blocked.add(`${t.col},${t.row}`)
+      }
+    }
+    return blocked
   }
 
   /** Build list of seat UIDs that are within the café zone */
@@ -271,6 +368,20 @@ export class OfficeState {
       // Actimento Hub gets its own CI character (char_6)
       palette = 6
       hueShift = 0
+    } else if (
+      (folderName && folderName.toLowerCase().includes('mahnwesen')) ||
+      (projectPath && projectPath.toLowerCase().includes('mahnwesen'))
+    ) {
+      // Mahnwesen: fixed blue-violet identity
+      palette = 2
+      hueShift = 210
+    } else if (
+      (folderName && (folderName.toLowerCase().includes('roehll') || folderName.toLowerCase().includes('röhl'))) ||
+      (projectPath && (projectPath.toLowerCase().includes('roehll') || projectPath.toLowerCase().includes('röhl')))
+    ) {
+      // Röhl / KI-Assistent: fixed warm amber identity
+      palette = 4
+      hueShift = 90
     } else {
       const pick = this.pickDiversePalette()
       palette = pick.palette
@@ -313,6 +424,9 @@ export class OfficeState {
       ch.matrixEffect = 'spawn'
       ch.matrixEffectTimer = 0
       ch.matrixEffectSeeds = matrixEffectSeeds()
+    } else {
+      // Restored agent: default to inactive until new JSONL events prove otherwise
+      ch.isActive = false
     }
     this.characters.set(id, ch)
   }
@@ -455,19 +569,21 @@ export class OfficeState {
       }
     }
 
-    // Find closest walkable tile to parent as spawn position
+    // Collect spawn tiles already used by sibling subagents of the same parent
+    const siblingSpawnTiles = new Set<string>()
+    for (const [sid, meta] of this.subagentMeta) {
+      if (meta.parentAgentId === parentAgentId) {
+        const sibCh = this.characters.get(sid)
+        if (sibCh) siblingSpawnTiles.add(`${sibCh.tileCol},${sibCh.tileRow}`)
+      }
+    }
+
+    // Find closest walkable tile not already used by a sibling subagent
     let spawnTile = { col: parentCol, row: parentRow }
     if (this.walkableTiles.length > 0) {
-      let closest = this.walkableTiles[0]
-      let closestDist = dist(closest.col, closest.row)
-      for (let i = 1; i < this.walkableTiles.length; i++) {
-        const d = dist(this.walkableTiles[i].col, this.walkableTiles[i].row)
-        if (d < closestDist) {
-          closest = this.walkableTiles[i]
-          closestDist = d
-        }
-      }
-      spawnTile = closest
+      const sorted = [...this.walkableTiles].sort((a, b) => dist(a.col, a.row) - dist(b.col, b.row))
+      const tile = sorted.find(t => !siblingSpawnTiles.has(`${t.col},${t.row}`)) ?? sorted[0]
+      spawnTile = tile
     }
 
     // Spawn at walkable tile near parent, then walk to seat after spawn effect
@@ -778,12 +894,17 @@ export class OfficeState {
       }
 
       // Temporarily unblock own seat so character can pathfind to it
-      this.withOwnSeatUnblocked(ch, () =>
-        updateCharacter(ch, dt, this.walkableTiles, this.seats, this.tileMap, this.blockedTiles, this.cafeWalkableTiles)
-      )
+      if (ch.isMascot) {
+        // Mascot wanders freely in the Chefzimmer — zone-restricted blocked tiles prevent it from leaving
+        updateCharacter(ch, dt, this.mascotWalkableTiles, this.seats, this.tileMap, this.mascotBlockedTiles, this.mascotWalkableTiles)
+      } else {
+        this.withOwnSeatUnblocked(ch, () =>
+          updateCharacter(ch, dt, this.walkableTiles, this.seats, this.tileMap, this.blockedTiles, this.cafeWalkableTiles)
+        )
+      }
 
-      // Handle café phase transitions (after the basic FSM runs)
-      this.updateCafePhase(ch, dt)
+      // Handle café phase transitions (after the basic FSM runs) — mascots don't do café
+      if (!ch.isMascot) this.updateCafePhase(ch, dt)
 
       // Tick bubble timer for waiting bubbles
       if (ch.bubbleType === 'waiting') {
@@ -791,6 +912,18 @@ export class OfficeState {
         if (ch.bubbleTimer <= 0) {
           ch.bubbleType = null
           ch.bubbleTimer = 0
+          ch.bubbleText = undefined
+        }
+      }
+
+      // Mascot random idle bubbles (cafeBrewTimer repurposed as bubble cooldown)
+      if (ch.isMascot && ch.bubbleType === null) {
+        ch.cafeBrewTimer -= dt
+        if (ch.cafeBrewTimer <= 0) {
+          ch.bubbleType = 'waiting'
+          ch.bubbleText = MASCOT_MESSAGES[Math.floor(Math.random() * MASCOT_MESSAGES.length)]
+          ch.bubbleTimer = MASCOT_BUBBLE_DURATION_SEC
+          ch.cafeBrewTimer = 10 + Math.random() * 15
         }
       }
     }

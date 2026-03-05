@@ -1,15 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
 import { SettingsModal } from './SettingsModal.js'
-import type { WorkspaceFolder } from '../hooks/useExtensionMessages.js'
+import type { WorkspaceFolder, ProjectEntry } from '../hooks/useExtensionMessages.js'
 import { vscode } from '../vscodeApi.js'
 
 interface BottomToolbarProps {
   isEditMode: boolean
-  onOpenClaude: () => void
   onToggleEditMode: () => void
   isDebugMode: boolean
   onToggleDebugMode: () => void
   workspaceFolders: WorkspaceFolder[]
+  projects: ProjectEntry[]
   isCatalogOpen?: boolean
   onToggleCatalog?: () => void
 }
@@ -45,113 +45,167 @@ const btnActive: React.CSSProperties = {
   border: '2px solid var(--pixel-accent)',
 }
 
+const dropdownStyle: React.CSSProperties = {
+  position: 'absolute',
+  bottom: '100%',
+  left: 0,
+  marginBottom: 4,
+  background: 'var(--pixel-bg)',
+  border: '2px solid var(--pixel-border)',
+  borderRadius: 0,
+  boxShadow: 'var(--pixel-shadow)',
+  minWidth: 200,
+  maxHeight: 320,
+  overflowY: 'auto',
+  zIndex: 'var(--pixel-controls-z)',
+}
+
+function projectDisplayName(name: string): string {
+  return name.replace(/[-_]/g, ' ')
+}
+
+interface ProjectDropdownProps {
+  projects: ProjectEntry[]
+  workspaceFolders: WorkspaceFolder[]
+  model: string
+  onClose: () => void
+}
+
+function ProjectDropdown({ projects, workspaceFolders, model, onClose }: ProjectDropdownProps) {
+  const [hovered, setHovered] = useState<string | null>(null)
+
+  const handleSelect = (p: { name: string; path: string }) => {
+    onClose()
+    vscode.postMessage({ type: 'openClaude', folderPath: p.path, model })
+  }
+
+  const handleBrowse = () => {
+    onClose()
+    vscode.postMessage({ type: 'pickFolderAndOpenClaude', model })
+  }
+
+  const itemStyle = (key: string): React.CSSProperties => ({
+    display: 'block',
+    width: '100%',
+    textAlign: 'left',
+    padding: '6px 10px',
+    fontSize: '22px',
+    color: 'var(--pixel-text)',
+    background: hovered === key ? 'var(--pixel-btn-hover-bg)' : 'transparent',
+    border: 'none',
+    borderRadius: 0,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  })
+
+  // Combine workspace folders (at top) + discovered projects, deduped by path
+  const wsPaths = new Set(workspaceFolders.map(f => f.path))
+  const filteredProjects = projects.filter(p => !wsPaths.has(p.path))
+
+  return (
+    <div style={dropdownStyle}>
+      {workspaceFolders.length > 0 && (
+        <>
+          <div style={{ padding: '3px 10px', fontSize: '18px', color: 'var(--pixel-text-dim)', opacity: 0.6 }}>
+            Workspace
+          </div>
+          {workspaceFolders.map(f => (
+            <button
+              key={f.path}
+              onClick={() => handleSelect(f)}
+              onMouseEnter={() => setHovered(f.path)}
+              onMouseLeave={() => setHovered(null)}
+              style={itemStyle(f.path)}
+            >
+              {f.name}
+            </button>
+          ))}
+          {filteredProjects.length > 0 && (
+            <div style={{ borderTop: '1px solid var(--pixel-border)', margin: '2px 0' }} />
+          )}
+        </>
+      )}
+      {filteredProjects.length > 0 && (
+        <>
+          <div style={{ padding: '3px 10px', fontSize: '18px', color: 'var(--pixel-text-dim)', opacity: 0.6 }}>
+            Projekte
+          </div>
+          {filteredProjects.map(p => (
+            <button
+              key={p.path}
+              onClick={() => handleSelect(p)}
+              onMouseEnter={() => setHovered(p.path)}
+              onMouseLeave={() => setHovered(null)}
+              style={itemStyle(p.path)}
+            >
+              {projectDisplayName(p.name)}
+            </button>
+          ))}
+        </>
+      )}
+      <div style={{ borderTop: '1px solid var(--pixel-border)', margin: '2px 0' }} />
+      <button
+        onClick={handleBrowse}
+        onMouseEnter={() => setHovered('__browse__')}
+        onMouseLeave={() => setHovered(null)}
+        style={itemStyle('__browse__')}
+      >
+        Browse...
+      </button>
+    </div>
+  )
+}
+
 
 export function BottomToolbar({
   isEditMode,
-  onOpenClaude,
   onToggleEditMode,
   isDebugMode,
   onToggleDebugMode,
   workspaceFolders,
+  projects,
   isCatalogOpen,
   onToggleCatalog,
 }: BottomToolbarProps) {
   const [hovered, setHovered] = useState<string | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [isFolderPickerOpen, setIsFolderPickerOpen] = useState(false)
-  const [hoveredFolder, setHoveredFolder] = useState<number | null>(null)
-  const folderPickerRef = useRef<HTMLDivElement>(null)
+  const [isProjectsOpen, setIsProjectsOpen] = useState(false)
+  const projectsRef = useRef<HTMLDivElement>(null)
 
-  // Close folder picker on outside click
+  // Close projects dropdown on outside click
   useEffect(() => {
-    if (!isFolderPickerOpen) return
+    if (!isProjectsOpen) return
     const handleClick = (e: MouseEvent) => {
-      if (folderPickerRef.current && !folderPickerRef.current.contains(e.target as Node)) {
-        setIsFolderPickerOpen(false)
+      if (projectsRef.current && !projectsRef.current.contains(e.target as Node)) {
+        setIsProjectsOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
-  }, [isFolderPickerOpen])
-
-  const hasMultipleFolders = workspaceFolders.length > 1
+  }, [isProjectsOpen])
 
   const handleAgentClick = () => {
-    if (hasMultipleFolders) {
-      setIsFolderPickerOpen((v) => !v)
-    } else if (workspaceFolders.length === 1) {
-      vscode.postMessage({ type: 'openClaude', folderPath: workspaceFolders[0].path, model: 'sonnet' })
-    } else {
-      onOpenClaude()
-    }
-  }
-
-  const handleFolderSelect = (folder: WorkspaceFolder) => {
-    setIsFolderPickerOpen(false)
-    vscode.postMessage({ type: 'openClaude', folderPath: folder.path, model: 'sonnet' })
+    vscode.postMessage({ type: 'openClaude', model: 'sonnet' })
   }
 
   return (
     <div style={panelStyle}>
-      <div ref={folderPickerRef} style={{ position: 'relative' }}>
-        <button
-          onClick={handleAgentClick}
-          onMouseEnter={() => setHovered('agent')}
-          onMouseLeave={() => setHovered(null)}
-          style={{
-            ...btnBase,
-            padding: '5px 12px',
-            background:
-              hovered === 'agent' || isFolderPickerOpen
-                ? 'var(--pixel-agent-hover-bg)'
-                : 'var(--pixel-agent-bg)',
-            border: '2px solid var(--pixel-agent-border)',
-            color: 'var(--pixel-agent-text)',
-          }}
-        >
-          + Agent
-        </button>
-        {isFolderPickerOpen && (
-          <div
-            style={{
-              position: 'absolute',
-              bottom: '100%',
-              left: 0,
-              marginBottom: 4,
-              background: 'var(--pixel-bg)',
-              border: '2px solid var(--pixel-border)',
-              borderRadius: 0,
-              boxShadow: 'var(--pixel-shadow)',
-              minWidth: 160,
-              zIndex: 'var(--pixel-controls-z)',
-            }}
-          >
-            {workspaceFolders.map((folder, i) => (
-              <button
-                key={folder.path}
-                onClick={() => handleFolderSelect(folder)}
-                onMouseEnter={() => setHoveredFolder(i)}
-                onMouseLeave={() => setHoveredFolder(null)}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '6px 10px',
-                  fontSize: '22px',
-                  color: 'var(--pixel-text)',
-                  background: hoveredFolder === i ? 'var(--pixel-btn-hover-bg)' : 'transparent',
-                  border: 'none',
-                  borderRadius: 0,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {folder.name}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* +Agent: direkt öffnen, kein Dropdown */}
+      <button
+        onClick={handleAgentClick}
+        onMouseEnter={() => setHovered('agent')}
+        onMouseLeave={() => setHovered(null)}
+        style={{
+          ...btnBase,
+          padding: '5px 12px',
+          background: hovered === 'agent' ? 'var(--pixel-agent-hover-bg)' : 'var(--pixel-agent-bg)',
+          border: '2px solid var(--pixel-agent-border)',
+          color: 'var(--pixel-agent-text)',
+        }}
+      >
+        + Agent
+      </button>
+
       <button
         onClick={onToggleEditMode}
         onMouseEnter={() => setHovered('edit')}
@@ -209,6 +263,34 @@ export function BottomToolbar({
           isDebugMode={isDebugMode}
           onToggleDebugMode={onToggleDebugMode}
         />
+      </div>
+
+      {/* Projects-Picker: rechts von Settings */}
+      <div ref={projectsRef} style={{ position: 'relative' }}>
+        <button
+          onClick={() => setIsProjectsOpen((v) => !v)}
+          onMouseEnter={() => setHovered('projects')}
+          onMouseLeave={() => setHovered(null)}
+          style={
+            isProjectsOpen
+              ? { ...btnActive }
+              : {
+                  ...btnBase,
+                  background: hovered === 'projects' ? 'var(--pixel-btn-hover-bg)' : btnBase.background,
+                }
+          }
+          title="Projekt öffnen"
+        >
+          Projects
+        </button>
+        {isProjectsOpen && (
+          <ProjectDropdown
+            projects={projects}
+            workspaceFolders={workspaceFolders}
+            model="sonnet"
+            onClose={() => setIsProjectsOpen(false)}
+          />
+        )}
       </div>
     </div>
   )

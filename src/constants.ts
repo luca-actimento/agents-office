@@ -3,8 +3,9 @@ export const JSONL_POLL_INTERVAL_MS = 1000;
 export const FILE_WATCHER_POLL_INTERVAL_MS = 1000;
 export const PROJECT_SCAN_INTERVAL_MS = 1000;
 export const TOOL_DONE_DELAY_MS = 300;
-export const PERMISSION_TIMER_DELAY_MS = 3000;
+export const PERMISSION_TIMER_DELAY_MS = 10000;
 export const TEXT_IDLE_DELAY_MS = 5000;
+export const STALE_ACTIVITY_TIMEOUT_MS = 15000;
 
 // ── Display Truncation ──────────────────────────────────────
 export const BASH_COMMAND_DISPLAY_MAX_LENGTH = 30;
@@ -36,6 +37,7 @@ export const GLOBAL_KEY_SOUND_ENABLED = 'agents-office.soundEnabled';
 export const VIEW_ID = 'agents-office.panelView';
 export const COMMAND_SHOW_PANEL = 'agents-office.showPanel';
 export const COMMAND_EXPORT_DEFAULT_LAYOUT = 'agents-office.exportDefaultLayout';
+export const COMMAND_TEST_SUBAGENT = 'agents-office.testSubagent';
 export const WORKSPACE_KEY_AGENTS = 'agents-office.agents';
 export const WORKSPACE_KEY_AGENT_SEATS = 'agents-office.agentSeats';
 export const WORKSPACE_KEY_LAYOUT = 'agents-office.layout';
