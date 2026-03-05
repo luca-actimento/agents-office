@@ -185,7 +185,12 @@ export function BottomToolbar({
   }, [isProjectsOpen])
 
   const handleAgentClick = () => {
-    vscode.postMessage({ type: 'openClaude', model: 'sonnet' })
+    const hasContext = workspaceFolders.length > 0 || projects.length > 0
+    if (hasContext) {
+      vscode.postMessage({ type: 'openClaude', model: 'sonnet' })
+    } else {
+      vscode.postMessage({ type: 'pickFolderAndOpenClaude', model: 'sonnet' })
+    }
   }
 
   return (
