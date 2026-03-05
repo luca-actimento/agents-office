@@ -3,8 +3,9 @@ export const JSONL_POLL_INTERVAL_MS = 1000;
 export const FILE_WATCHER_POLL_INTERVAL_MS = 1000;
 export const PROJECT_SCAN_INTERVAL_MS = 1000;
 export const TOOL_DONE_DELAY_MS = 300;
-export const PERMISSION_TIMER_DELAY_MS = 10000;
+export const PERMISSION_TIMER_DELAY_MS = 25000;
 export const TEXT_IDLE_DELAY_MS = 5000;
+export const TURN_END_IDLE_DELAY_MS = 3000;
 export const STALE_ACTIVITY_TIMEOUT_MS = 15000;
 
 // ── Display Truncation ──────────────────────────────────────
@@ -32,6 +33,8 @@ export const LAYOUT_FILE_POLL_INTERVAL_MS = 2000;
 
 // ── Settings Persistence ────────────────────────────────────
 export const GLOBAL_KEY_SOUND_ENABLED = 'agents-office.soundEnabled';
+export const GLOBAL_KEY_DOOR_SOUND_ENABLED = 'agents-office.doorSoundEnabled';
+export const GLOBAL_KEY_AGENT_SOUND_ENABLED = 'agents-office.agentSoundEnabled';
 
 // ── VS Code Identifiers ─────────────────────────────────────
 export const VIEW_ID = 'agents-office.panelView';

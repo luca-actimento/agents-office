@@ -474,16 +474,12 @@ export function renderBubbles(
       alpha = ch.bubbleTimer / BUBBLE_FADE_DURATION_SEC
     }
 
-    // Mascot bubbles are rendered as HTML (see MascotBubble component) to stay above overlays
-    if (ch.isMascot) continue
-
     const sittingOff = ch.state === CharacterState.TYPE ? BUBBLE_SITTING_OFFSET_PX : 0
     const charPixelX = Math.round(offsetX + ch.x * zoom)
     const charHeadY = Math.round(offsetY + (ch.y + sittingOff - BUBBLE_VERTICAL_OFFSET_PX) * zoom)
 
     if (ch.bubbleText) {
-      // Text speech bubble for mascot
-      renderTextBubble(ctx, ch.bubbleText, charPixelX, charHeadY, alpha, zoom)
+      renderTextBubble(ctx, ch.bubbleText, charPixelX, charHeadY, alpha, zoom, ch.isMascot ? '#FFFFFF' : undefined)
     } else {
       // Sprite bubble (checkmark / permission)
       const sprite = ch.bubbleType === 'permission'
@@ -507,11 +503,12 @@ function renderTextBubble(
   headY: number,
   alpha: number,
   zoom: number,
+  bgColor = '#EEEEFF',
 ): void {
   const fontSize = Math.max(9, Math.round(7 * zoom))
   ctx.save()
   ctx.globalAlpha = alpha
-  ctx.font = `${fontSize}px "Segoe UI", system-ui, sans-serif`
+  ctx.font = `${fontSize}px "FS Pixel Sans", sans-serif`
 
   const padding = Math.round(4 * zoom)
   const tailH = Math.round(5 * zoom)
@@ -524,7 +521,7 @@ function renderTextBubble(
   const by = Math.round(headY - h - tailH - 2 * zoom)
 
   // Background rounded rect
-  ctx.fillStyle = '#EEEEFF'
+  ctx.fillStyle = bgColor
   ctx.strokeStyle = '#555566'
   ctx.lineWidth = Math.max(1, zoom * 0.5)
   ctx.beginPath()
@@ -538,7 +535,7 @@ function renderTextBubble(
   ctx.lineTo(cx + Math.round(4 * zoom), by + h)
   ctx.lineTo(cx, by + h + tailH)
   ctx.closePath()
-  ctx.fillStyle = '#EEEEFF'
+  ctx.fillStyle = bgColor
   ctx.fill()
   // Tail border (left + right sides only, not bottom gap)
   ctx.strokeStyle = '#555566'

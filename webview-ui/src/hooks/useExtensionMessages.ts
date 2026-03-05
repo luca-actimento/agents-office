@@ -8,7 +8,7 @@ import { setFloorSprites } from '../office/floorTiles.js'
 import { setWallSprites } from '../office/wallTiles.js'
 import { setCharacterTemplates } from '../office/sprites/spriteData.js'
 import { vscode } from '../vscodeApi.js'
-import { playDoneSound, playApprovalSound, setSoundEnabled, playThinkingSound, playSubagentSpawnSound, playSubagentDoneSound } from '../notificationSound.js'
+import { playDoneSound, playApprovalSound, setSoundEnabled, setDoorSoundEnabled, setAgentSoundEnabled, playThinkingSound, playSubagentSpawnSound, playSubagentDoneSound } from '../notificationSound.js'
 
 export interface SubagentCharacter {
   id: number
@@ -367,6 +367,8 @@ export function useExtensionMessages(
       } else if (msg.type === 'settingsLoaded') {
         const soundOn = msg.soundEnabled as boolean
         setSoundEnabled(soundOn)
+        setDoorSoundEnabled(msg.doorSoundEnabled as boolean)
+        setAgentSoundEnabled(msg.agentSoundEnabled as boolean)
       } else if (msg.type === 'furnitureAssetsLoaded') {
         try {
           const catalog = msg.catalog as FurnitureAsset[]

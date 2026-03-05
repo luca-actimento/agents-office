@@ -15,7 +15,7 @@ import {
 } from './agentManager.js';
 import { ensureProjectScan } from './fileWatcher.js';
 import { loadFurnitureAssets, sendAssetsToWebview, loadFloorTiles, sendFloorTilesToWebview, loadWallTiles, sendWallTilesToWebview, loadCharacterSprites, sendCharacterSpritesToWebview, loadDefaultLayout } from './assetLoader.js';
-import { WORKSPACE_KEY_AGENT_SEATS, GLOBAL_KEY_SOUND_ENABLED } from './constants.js';
+import { WORKSPACE_KEY_AGENT_SEATS, GLOBAL_KEY_SOUND_ENABLED, GLOBAL_KEY_DOOR_SOUND_ENABLED, GLOBAL_KEY_AGENT_SOUND_ENABLED } from './constants.js';
 import { writeLayoutToFile, readLayoutFromFile, watchLayoutFile } from './layoutPersistence.js';
 import type { LayoutWatcher } from './layoutPersistence.js';
 import { setDebugLogging } from './debugLog.js';
@@ -95,6 +95,10 @@ export class AgentsOfficeViewProvider implements vscode.WebviewViewProvider {
 				writeLayoutToFile(message.layout as Record<string, unknown>);
 			} else if (message.type === 'setSoundEnabled') {
 				this.context.globalState.update(GLOBAL_KEY_SOUND_ENABLED, message.enabled);
+			} else if (message.type === 'setDoorSoundEnabled') {
+				this.context.globalState.update(GLOBAL_KEY_DOOR_SOUND_ENABLED, message.enabled);
+			} else if (message.type === 'setAgentSoundEnabled') {
+				this.context.globalState.update(GLOBAL_KEY_AGENT_SOUND_ENABLED, message.enabled);
 			} else if (message.type === 'webviewReady') {
 				await restoreAgents(
 					this.context,
@@ -106,7 +110,9 @@ export class AgentsOfficeViewProvider implements vscode.WebviewViewProvider {
 				);
 				// Send persisted settings to webview
 				const soundEnabled = this.context.globalState.get<boolean>(GLOBAL_KEY_SOUND_ENABLED, true);
-				this.webview?.postMessage({ type: 'settingsLoaded', soundEnabled });
+				const doorSoundEnabled = this.context.globalState.get<boolean>(GLOBAL_KEY_DOOR_SOUND_ENABLED, true);
+				const agentSoundEnabled = this.context.globalState.get<boolean>(GLOBAL_KEY_AGENT_SOUND_ENABLED, true);
+				this.webview?.postMessage({ type: 'settingsLoaded', soundEnabled, doorSoundEnabled, agentSoundEnabled });
 
 				// Send workspace folders to webview
 				const wsFolders = vscode.workspace.workspaceFolders;

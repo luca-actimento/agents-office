@@ -12,6 +12,7 @@ import { debugLog } from './debugLog.js';
 import {
 	TOOL_DONE_DELAY_MS,
 	TEXT_IDLE_DELAY_MS,
+	TURN_END_IDLE_DELAY_MS,
 	BASH_COMMAND_DISPLAY_MAX_LENGTH,
 	TASK_DESCRIPTION_DISPLAY_MAX_LENGTH,
 } from './constants.js';
@@ -182,11 +183,11 @@ export function processTranscriptLine(
 			agent.isWaiting = true;
 			agent.permissionSent = false;
 			agent.hadToolsInTurn = false;
-			webview?.postMessage({
-				type: 'agentStatus',
-				id: agentId,
-				status: 'waiting',
-			});
+			// Delay the "waiting" notification to the webview: in autonomous multi-turn work,
+			// a new turn starts within seconds. If new JSONL arrives, cancelWaitingTimer cancels
+			// this and the agent stays active. Only if no data arrives (genuine user-input wait)
+			// does the timer fire and "Idle" appear.
+			startWaitingTimer(agentId, TURN_END_IDLE_DELAY_MS, agents, waitingTimers, webview);
 		}
 	} catch {
 		// Ignore malformed lines

@@ -66,8 +66,14 @@ export function readNewLines(
 				if (staleSecs > 0 && staleSecs % 5 === 0) {
 					debugLog(`agent ${agentId}: no new JSONL for ${staleSecs}s (isWaiting=false, hadTools=${agent.hadToolsInTurn}, activeTools=${agent.activeToolIds.size})`);
 				}
-				if (Date.now() - agent.lastActivityTime > STALE_ACTIVITY_TIMEOUT_MS) {
-					debugLog(`agent ${agentId}: STALE → forcing waiting (no JSONL for ${staleSecs}s)`);
+				// Only force-wait if no tools are actively tracked. If activeToolIds is non-empty,
+				// a long-running tool (e.g. npm install, long bash) is still executing — don't
+				// interrupt it. Use a much longer timeout for the stuck-mid-tool edge case.
+				const timeoutMs = agent.activeToolIds.size > 0
+					? STALE_ACTIVITY_TIMEOUT_MS * 20  // 5 min: agent killed mid-tool
+					: STALE_ACTIVITY_TIMEOUT_MS;       // 15 s: agent killed between tools
+				if (Date.now() - agent.lastActivityTime > timeoutMs) {
+					debugLog(`agent ${agentId}: STALE → forcing waiting (no JSONL for ${staleSecs}s, activeTools=${agent.activeToolIds.size})`);
 					agent.isWaiting = true;
 					agent.activeToolIds.clear();
 					agent.activeToolStatuses.clear();

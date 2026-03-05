@@ -54,45 +54,24 @@ export function MascotBubble({ officeState, containerRef, zoom, panRef }: Mascot
         zIndex: 60,
         pointerEvents: 'none',
         opacity: alpha,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
         marginTop: `-${Math.round(16 * zoom / dpr)}px`,
       }}
     >
-      {/* Bubble box */}
       <div style={{
-        background: '#EEEEFF',
-        border: '1.5px solid #555566',
-        borderRadius: 4,
-        padding: '3px 7px',
-        fontSize: Math.max(8, Math.round(16 * zoom / dpr / 3)),
-        color: '#333344',
-        maxWidth: Math.round(16 * zoom / dpr * 5),
+        background: 'rgba(255, 255, 255, 0.95)',
+        border: '2px solid var(--pixel-border)',
+        borderRadius: 0,
+        padding: '3px 8px',
+        fontSize: '20px',
+        color: '#1e1e2e',
+        maxWidth: 180,
         whiteSpace: 'normal',
         wordBreak: 'break-word',
-        fontFamily: '"Segoe UI", system-ui, sans-serif',
         lineHeight: 1.3,
+        boxShadow: 'var(--pixel-shadow)',
       }}>
         {mascot.bubbleText}
       </div>
-      {/* Tail */}
-      <div style={{
-        width: 0,
-        height: 0,
-        borderLeft: '5px solid transparent',
-        borderRight: '5px solid transparent',
-        borderTop: '6px solid #555566',
-        marginTop: -1,
-      }} />
-      <div style={{
-        width: 0,
-        height: 0,
-        borderLeft: '4px solid transparent',
-        borderRight: '4px solid transparent',
-        borderTop: '5px solid #EEEEFF',
-        marginTop: -10,
-      }} />
     </div>
   )
 }

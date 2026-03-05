@@ -157,6 +157,7 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode 
                 const v = !isDoorSoundEnabled()
                 setDoorSoundEnabled(v)
                 setDoorSoundLocal(v)
+                vscode.postMessage({ type: 'setDoorSoundEnabled', enabled: v })
               }}
               onMouseEnter={() => setHovered('door')}
               onMouseLeave={() => setHovered(null)}
@@ -172,6 +173,7 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode 
                 const v = !isAgentSoundEnabled()
                 setAgentSoundEnabled(v)
                 setAgentSoundLocal(v)
+                vscode.postMessage({ type: 'setAgentSoundEnabled', enabled: v })
               }}
               onMouseEnter={() => setHovered('agent')}
               onMouseLeave={() => setHovered(null)}
