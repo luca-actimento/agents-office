@@ -57,7 +57,7 @@ export function MascotBubble({ officeState, containerRef, zoom, panRef }: Mascot
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        marginTop: `-${Math.round(30 * zoom)}px`,
+        marginTop: `-${Math.round(16 * zoom / dpr)}px`,
       }}
     >
       {/* Bubble box */}
@@ -66,9 +66,11 @@ export function MascotBubble({ officeState, containerRef, zoom, panRef }: Mascot
         border: '1.5px solid #555566',
         borderRadius: 4,
         padding: '3px 7px',
-        fontSize: Math.max(9, Math.round(7 * zoom)),
+        fontSize: Math.max(8, Math.round(16 * zoom / dpr / 3)),
         color: '#333344',
-        whiteSpace: 'nowrap',
+        maxWidth: Math.round(16 * zoom / dpr * 5),
+        whiteSpace: 'normal',
+        wordBreak: 'break-word',
         fontFamily: '"Segoe UI", system-ui, sans-serif',
         lineHeight: 1.3,
       }}>
