@@ -3,7 +3,7 @@ import type { OfficeState } from '../engine/officeState.js'
 import type { EditorState } from '../editor/editorState.js'
 import type { EditorRenderState, SelectionRenderState, DeleteButtonBounds, RotateButtonBounds } from '../engine/renderer.js'
 import { startGameLoop } from '../engine/gameLoop.js'
-import { renderFrame, renderGhostPreview } from '../engine/renderer.js'
+import { renderFrame, renderGhostPreview, renderEmotes } from '../engine/renderer.js'
 import { TILE_SIZE, EditTool } from '../types.js'
 import { CAMERA_FOLLOW_LERP, CAMERA_FOLLOW_SNAP_THRESHOLD, ZOOM_MIN, ZOOM_MAX, ZOOM_SCROLL_THRESHOLD, PAN_MARGIN_FRACTION } from '../../constants.js'
 import { getCatalogEntry, isRotatable } from '../layout/furnitureCatalog.js'
@@ -224,6 +224,9 @@ export function OfficeCanvas({ officeState, onClick, isEditMode, editorState, on
           officeState.getLayout().rows,
         )
         offsetRef.current = { x: offsetX, y: offsetY }
+
+        // Render emote bubbles on top of everything
+        renderEmotes(ctx, officeState.getCharacters(), offsetX, offsetY, zoom)
 
         // Store delete/rotate button bounds for hit-testing
         deleteButtonBoundsRef.current = editorRender?.deleteButtonBounds ?? null

@@ -57,6 +57,7 @@ export interface ExtensionMessageState {
   workspaceFolders: WorkspaceFolder[]
   projects: ProjectEntry[]
   layouts: { builtin: LayoutEntry[]; user: LayoutEntry[] }
+  projectIdentities: Record<string, { palette: number; hueShift: number }>
 }
 
 export interface LayoutEntry {
@@ -89,6 +90,12 @@ export function useExtensionMessages(
   const [workspaceFolders, setWorkspaceFolders] = useState<WorkspaceFolder[]>([])
   const [projects, setProjects] = useState<ProjectEntry[]>([])
   const [layouts, setLayouts] = useState<{ builtin: LayoutEntry[]; user: LayoutEntry[] }>({ builtin: [], user: [] })
+  const [projectIdentities, setProjectIdentities] = useState<Record<string, { palette: number; hueShift: number }>>({
+    'actimento': { palette: 6, hueShift: 0 },
+    'mahnwesen': { palette: 2, hueShift: 210 },
+    'roehll': { palette: 4, hueShift: 90 },
+    'röhl': { palette: 4, hueShift: 90 },
+  })
 
   // Track whether initial layout has been loaded (ref to avoid re-render)
   const layoutReadyRef = useRef(false)
@@ -136,6 +143,35 @@ export function useExtensionMessages(
         setSelectedAgent(id)
         os.addAgent(id, undefined, undefined, undefined, undefined, folderName, projectDir)
         saveAgentSeats(os)
+      } else if (msg.type === 'agentGoingHome') {
+        // Terminal closed — start Feierabend walk animation, clean up React state after delay
+        const id = msg.id as number
+        os.removeAllSubagents(id)
+        setSubagentCharacters(prev => prev.filter(s => s.parentAgentId !== id))
+        os.startFeierabend(id)
+        // Clean up React state after Feierabend animation finishes (~3.5s)
+        setTimeout(() => {
+          setAgents(prev => prev.filter(a => a !== id))
+          setSelectedAgent(prev => (prev === id ? null : prev))
+          setAgentTools(prev => {
+            if (!(id in prev)) return prev
+            const next = { ...prev }
+            delete next[id]
+            return next
+          })
+          setAgentStatuses(prev => {
+            if (!(id in prev)) return prev
+            const next = { ...prev }
+            delete next[id]
+            return next
+          })
+          setSubagentTools(prev => {
+            if (!(id in prev)) return prev
+            const next = { ...prev }
+            delete next[id]
+            return next
+          })
+        }, 3500)
       } else if (msg.type === 'agentClosed') {
         const id = msg.id as number
         setAgents((prev) => prev.filter((a) => a !== id))
@@ -195,6 +231,17 @@ export function useExtensionMessages(
         os.setAgentTool(id, toolName)
         os.setAgentActive(id, true)
         os.clearPermissionBubble(id)
+        // Tool-specific emotes
+        if (toolName) {
+          const tl = toolName.toLowerCase()
+          if (tl.includes('webfetch') || tl.includes('websearch')) {
+            os.setAgentEmote(id, '🌐', 2500)
+          } else if (tl === 'read' || tl === 'write' || tl === 'edit') {
+            os.setAgentEmote(id, '📝', 2000)
+          } else if (tl === 'bash' || tl.includes('terminal')) {
+            os.setAgentEmote(id, '⚙️', 2000)
+          }
+        }
         // Create sub-agent character for Task tool subtasks
         if (status.startsWith('Subtask:') || status === 'Running subtask') {
           const label = status.startsWith('Subtask:') ? status.slice('Subtask:'.length).trim() : 'Subtask'
@@ -255,12 +302,14 @@ export function useExtensionMessages(
         os.setAgentActive(id, status === 'active')
         if (status === 'waiting') {
           os.showWaitingBubble(id)
+          os.setAgentEmote(id, '❓', 3000)
           playDoneSound()
           prevAgentStatusRef.current[id] = 'waiting'
         } else if (status === 'active') {
           // Only play thinking sound when transitioning from waiting (new turn), not on tool calls
           if (prevAgentStatusRef.current[id] === 'waiting') {
             playThinkingSound()
+            os.setAgentEmote(id, '💡', 2000)
           }
           prevAgentStatusRef.current[id] = 'active'
         }
@@ -371,6 +420,14 @@ export function useExtensionMessages(
         setWorkspaceFolders(folders)
       } else if (msg.type === 'projectsList') {
         setProjects(msg.projects as ProjectEntry[])
+      } else if (msg.type === 'projectIdentitiesLoaded') {
+        const identities = msg.identities as Record<string, { palette: number; hueShift: number }>
+        setProjectIdentities(identities)
+        getOfficeState().setProjectIdentities(identities)
+      } else if (msg.type === 'projectIdentitiesSaved') {
+        const identities = msg.identities as Record<string, { palette: number; hueShift: number }>
+        setProjectIdentities(identities)
+        getOfficeState().setProjectIdentities(identities)
       } else if (msg.type === 'layoutsList') {
         setLayouts({ builtin: msg.builtin as LayoutEntry[], user: msg.user as LayoutEntry[] })
       } else if (msg.type === 'layoutSaved') {
@@ -398,5 +455,5 @@ export function useExtensionMessages(
     return () => window.removeEventListener('message', handler)
   }, [getOfficeState])
 
-  return { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders, projects, layouts }
+  return { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders, projects, layouts, projectIdentities }
 }

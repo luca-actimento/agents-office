@@ -13,6 +13,8 @@ interface SettingsModalProps {
   onRequestLayouts: () => void
   onLoadLayout: (filename: string) => void
   onSaveLayoutAs: (name: string) => void
+  projectIdentities: Record<string, { palette: number; hueShift: number }>
+  onSaveProjectIdentities: (identities: Record<string, { palette: number; hueShift: number }>) => void
 }
 
 const menuItemBase: React.CSSProperties = {
@@ -53,15 +55,47 @@ function Checkbox({ checked }: { checked: boolean }) {
   )
 }
 
-export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode, layouts, onRequestLayouts, onLoadLayout, onSaveLayoutAs }: SettingsModalProps) {
+export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode, layouts, onRequestLayouts, onLoadLayout, onSaveLayoutAs, projectIdentities, onSaveProjectIdentities }: SettingsModalProps) {
   const [hovered, setHovered] = useState<string | null>(null)
   const [soundsOpen, setSoundsOpen] = useState(false)
   const [layoutsOpen, setLayoutsOpen] = useState(false)
+  const [identitiesOpen, setIdentitiesOpen] = useState(false)
   const [saveNameInput, setSaveNameInput] = useState('')
   const [showSaveInput, setShowSaveInput] = useState(false)
   const [notifLocal, setNotifLocal] = useState(isSoundEnabled)
   const [doorSoundLocal, setDoorSoundLocal] = useState(isDoorSoundEnabled)
   const [agentSoundLocal, setAgentSoundLocal] = useState(isAgentSoundEnabled)
+  const [localIdentities, setLocalIdentities] = useState(projectIdentities)
+  const [newKey, setNewKey] = useState('')
+  const [newPalette, setNewPalette] = useState(0)
+  const [newHueShift, setNewHueShift] = useState(0)
+
+  // Sync wenn sich projectIdentities von außen ändert
+  const prevIdentitiesRef = useState(() => projectIdentities)[0]
+  if (projectIdentities !== prevIdentitiesRef && JSON.stringify(projectIdentities) !== JSON.stringify(localIdentities)) {
+    setLocalIdentities(projectIdentities)
+  }
+
+  const saveIdentities = (next: Record<string, { palette: number; hueShift: number }>) => {
+    setLocalIdentities(next)
+    onSaveProjectIdentities(next)
+  }
+
+  const removeIdentity = (key: string) => {
+    const next = { ...localIdentities }
+    delete next[key]
+    saveIdentities(next)
+  }
+
+  const addIdentity = () => {
+    const k = newKey.trim().toLowerCase()
+    if (!k) return
+    const next = { ...localIdentities, [k]: { palette: newPalette, hueShift: newHueShift } }
+    saveIdentities(next)
+    setNewKey('')
+    setNewPalette(0)
+    setNewHueShift(0)
+  }
 
   if (!isOpen) return null
 
@@ -246,6 +280,76 @@ export function SettingsModal({ isOpen, onClose, isDebugMode, onToggleDebugMode,
                 >Save</button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Agent Identities — expandable section */}
+        <button
+          onClick={() => setIdentitiesOpen((v) => !v)}
+          onMouseEnter={() => setHovered('identities')}
+          onMouseLeave={() => setHovered(null)}
+          style={{ ...menuItemBase, background: hovered === 'identities' ? 'rgba(255, 255, 255, 0.08)' : 'transparent' }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: '18px', opacity: 0.6 }}>{identitiesOpen ? '▼' : '▶'}</span>
+            Agent Identities
+          </span>
+        </button>
+
+        {identitiesOpen && (
+          <div style={{ borderLeft: '2px solid rgba(255,255,255,0.12)', marginLeft: 14, marginBottom: 2 }}>
+            {/* Existing entries */}
+            {Object.entries(localIdentities).map(([key, val]) => (
+              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px' }}>
+                <span style={{ flex: 1, fontSize: '20px', color: 'rgba(255,255,255,0.8)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {key}
+                </span>
+                <span style={{ fontSize: '17px', color: 'rgba(255,255,255,0.45)', whiteSpace: 'nowrap' }}>
+                  P{val.palette} H{val.hueShift}°
+                </span>
+                <button
+                  onClick={() => removeIdentity(key)}
+                  onMouseEnter={() => setHovered('del-' + key)}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{ background: hovered === 'del-' + key ? 'rgba(255,80,80,0.3)' : 'transparent', border: 'none', color: 'rgba(255,100,100,0.7)', cursor: 'pointer', fontSize: '18px', padding: '0 4px', borderRadius: 0, lineHeight: 1 }}
+                  title="Entfernen"
+                >✕</button>
+              </div>
+            ))}
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', margin: '4px 0' }} />
+            {/* Add new entry */}
+            <div style={{ padding: '4px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <input
+                value={newKey}
+                onChange={e => setNewKey(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') addIdentity() }}
+                placeholder="Projekt-Schlüssel (z.B. meinprojekt)"
+                style={{ fontSize: '18px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '2px 6px', outline: 'none', borderRadius: 0 }}
+              />
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <label style={{ fontSize: '17px', color: 'rgba(255,255,255,0.5)' }}>Palette</label>
+                <input
+                  type="number" min={0} max={6} value={newPalette}
+                  onChange={e => setNewPalette(Number(e.target.value))}
+                  style={{ width: 40, fontSize: '18px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '2px 4px', outline: 'none', borderRadius: 0 }}
+                />
+                <label style={{ fontSize: '17px', color: 'rgba(255,255,255,0.5)' }}>Hue</label>
+                <input
+                  type="number" min={0} max={359} value={newHueShift}
+                  onChange={e => setNewHueShift(Number(e.target.value))}
+                  style={{ width: 50, fontSize: '18px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '2px 4px', outline: 'none', borderRadius: 0 }}
+                />
+                <button
+                  onClick={addIdentity}
+                  onMouseEnter={() => setHovered('add-identity')}
+                  onMouseLeave={() => setHovered(null)}
+                  style={{ fontSize: '18px', padding: '2px 10px', background: hovered === 'add-identity' ? 'rgba(90,200,90,0.3)' : 'rgba(90,200,90,0.15)', border: '1px solid rgba(90,200,90,0.4)', color: 'rgba(140,220,140,0.9)', cursor: 'pointer', borderRadius: 0 }}
+                >+ Add</button>
+              </div>
+              <span style={{ fontSize: '15px', color: 'rgba(255,255,255,0.3)' }}>
+                Palette 0–5 = Farb-Variante, 6 = Actimento-Sprite · Hue 0–359°
+              </span>
+            </div>
           </div>
         )}
 

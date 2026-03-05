@@ -553,6 +553,77 @@ function renderTextBubble(
   ctx.restore()
 }
 
+// ── Emote bubbles ───────────────────────────────────────────────
+
+export function renderEmotes(
+  ctx: CanvasRenderingContext2D,
+  characters: Character[],
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+): void {
+  const now = Date.now()
+  for (const ch of characters) {
+    if (!ch.emote) continue
+    // Fade out in last 500ms
+    const remaining = ch.emote.expiresAt - now
+    const alpha = remaining < 500 ? remaining / 500 : 1.0
+    if (alpha <= 0) continue
+
+    const sittingOff = ch.state === CharacterState.TYPE ? BUBBLE_SITTING_OFFSET_PX : 0
+    const charPixelX = Math.round(offsetX + ch.x * zoom)
+    // Position emote higher than regular bubbles (above speech bubble area)
+    const emoteY = Math.round(offsetY + (ch.y + sittingOff - BUBBLE_VERTICAL_OFFSET_PX - 16) * zoom)
+
+    const text = ch.emote.text
+    const fontSize = Math.max(10, Math.round(8 * zoom))
+    ctx.save()
+    ctx.globalAlpha = alpha
+    ctx.font = `${fontSize}px sans-serif`
+
+    const padding = Math.round(3 * zoom)
+    const tailH = Math.round(4 * zoom)
+    const r = Math.round(3 * zoom)
+    const metrics = ctx.measureText(text)
+    const w = Math.ceil(metrics.width) + padding * 2
+    const h = fontSize + padding * 2
+
+    const bx = Math.round(charPixelX - w / 2)
+    const by = Math.round(emoteY - h - tailH)
+
+    // Background (warm yellow — distinct from speech bubbles)
+    ctx.fillStyle = '#FFFDE7'
+    ctx.strokeStyle = '#FFC107'
+    ctx.lineWidth = Math.max(1, zoom * 0.5)
+    ctx.beginPath()
+    ctx.roundRect(bx, by, w, h, r)
+    ctx.fill()
+    ctx.stroke()
+
+    // Tail triangle pointing down
+    ctx.beginPath()
+    ctx.moveTo(charPixelX - Math.round(3 * zoom), by + h)
+    ctx.lineTo(charPixelX + Math.round(3 * zoom), by + h)
+    ctx.lineTo(charPixelX, by + h + tailH)
+    ctx.closePath()
+    ctx.fillStyle = '#FFFDE7'
+    ctx.fill()
+    ctx.strokeStyle = '#FFC107'
+    ctx.beginPath()
+    ctx.moveTo(charPixelX - Math.round(3 * zoom), by + h)
+    ctx.lineTo(charPixelX, by + h + tailH)
+    ctx.lineTo(charPixelX + Math.round(3 * zoom), by + h)
+    ctx.stroke()
+
+    // Emoji/text
+    ctx.fillStyle = '#333'
+    ctx.textBaseline = 'top'
+    ctx.fillText(text, bx + padding, by + padding)
+
+    ctx.restore()
+  }
+}
+
 export interface ButtonBounds {
   /** Center X in device pixels */
   cx: number
@@ -649,6 +720,9 @@ export function renderFrame(
 
   // Speech bubbles (always on top of characters)
   renderBubbles(ctx, characters, offsetX, offsetY, zoom)
+
+  // Emote bubbles (above speech bubbles)
+  renderEmotes(ctx, characters, offsetX, offsetY, zoom)
 
   // Editor overlays
   if (editor) {

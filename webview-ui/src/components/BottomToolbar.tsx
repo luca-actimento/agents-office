@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { SettingsModal } from './SettingsModal.js'
 import type { WorkspaceFolder, ProjectEntry, LayoutEntry } from '../hooks/useExtensionMessages.js'
 import { vscode } from '../vscodeApi.js'
@@ -11,8 +11,12 @@ interface BottomToolbarProps {
   workspaceFolders: WorkspaceFolder[]
   projects: ProjectEntry[]
   layouts: { builtin: LayoutEntry[]; user: LayoutEntry[] }
+  projectIdentities: Record<string, { palette: number; hueShift: number }>
   isCatalogOpen?: boolean
   onToggleCatalog?: () => void
+  isTerminalOpen?: boolean
+  onToggleTerminal?: () => void
+  onOpenInBrowser?: () => void
 }
 
 const panelStyle: React.CSSProperties = {
@@ -158,6 +162,66 @@ function ProjectDropdown({ projects, workspaceFolders, model, onClose }: Project
 }
 
 
+interface SplitAgentButtonProps {
+  label: string
+  model: string
+  projects: ProjectEntry[]
+  workspaceFolders: WorkspaceFolder[]
+  mainStyle: React.CSSProperties
+  mainHoverStyle: React.CSSProperties
+  arrowActiveStyle: React.CSSProperties
+}
+
+function SplitAgentButton({ label, model, projects, workspaceFolders, mainStyle, mainHoverStyle, arrowActiveStyle }: SplitAgentButtonProps) {
+  const [hoveredPart, setHoveredPart] = useState<'main' | 'arrow' | null>(null)
+  const [isOpen, setIsOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  const handleOutsideClick = useCallback((e: MouseEvent) => {
+    if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false)
+  }, [])
+
+  useEffect(() => {
+    if (!isOpen) return
+    document.addEventListener('mousedown', handleOutsideClick)
+    return () => document.removeEventListener('mousedown', handleOutsideClick)
+  }, [isOpen, handleOutsideClick])
+
+  const isHoverMain = hoveredPart === 'main'
+  const isHoverArrow = hoveredPart === 'arrow' || isOpen
+
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'flex' }}>
+      <button
+        onClick={() => vscode.postMessage({ type: 'openClaude', model })}
+        onMouseEnter={() => setHoveredPart('main')}
+        onMouseLeave={() => setHoveredPart(null)}
+        style={{ ...mainStyle, ...(isHoverMain ? mainHoverStyle : {}), borderRight: 'none' }}
+        title={`${label} im aktuellen Workspace starten`}
+      >
+        {label}
+      </button>
+      <button
+        onClick={() => setIsOpen((v) => !v)}
+        onMouseEnter={() => setHoveredPart('arrow')}
+        onMouseLeave={() => setHoveredPart(null)}
+        style={{ ...mainStyle, ...(isHoverArrow ? arrowActiveStyle : {}), padding: '5px 6px', fontSize: '13px' }}
+        title="Projekt auswählen"
+      >
+        ▾
+      </button>
+      {isOpen && (
+        <ProjectDropdown
+          projects={projects}
+          workspaceFolders={workspaceFolders}
+          model={model}
+          onClose={() => setIsOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
 export function BottomToolbar({
   isEditMode,
   onToggleEditMode,
@@ -166,8 +230,12 @@ export function BottomToolbar({
   workspaceFolders,
   projects,
   layouts,
+  projectIdentities,
   isCatalogOpen,
   onToggleCatalog,
+  isTerminalOpen,
+  onToggleTerminal,
+  onOpenInBrowser,
 }: BottomToolbarProps) {
   const [hovered, setHovered] = useState<string | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -186,32 +254,60 @@ export function BottomToolbar({
     return () => document.removeEventListener('mousedown', handleClick)
   }, [isProjectsOpen])
 
-  const handleAgentClick = () => {
-    const hasContext = workspaceFolders.length > 0 || projects.length > 0
-    if (hasContext) {
-      vscode.postMessage({ type: 'openClaude', model: 'sonnet' })
-    } else {
-      vscode.postMessage({ type: 'pickFolderAndOpenClaude', model: 'sonnet' })
-    }
-  }
-
   return (
     <div style={panelStyle}>
-      {/* +Agent: direkt öffnen, kein Dropdown */}
-      <button
-        onClick={handleAgentClick}
-        onMouseEnter={() => setHovered('agent')}
-        onMouseLeave={() => setHovered(null)}
-        style={{
-          ...btnBase,
-          padding: '5px 12px',
-          background: hovered === 'agent' ? 'var(--pixel-agent-hover-bg)' : 'var(--pixel-agent-bg)',
-          border: '2px solid var(--pixel-agent-border)',
-          color: 'var(--pixel-agent-text)',
-        }}
-      >
-        + Agent
-      </button>
+      <SplitAgentButton
+        label="+ Agent"
+        model="sonnet"
+        projects={projects}
+        workspaceFolders={workspaceFolders}
+        mainStyle={{ ...btnBase, padding: '5px 12px', background: 'var(--pixel-agent-bg)', border: '2px solid var(--pixel-agent-border)', color: 'var(--pixel-agent-text)' }}
+        mainHoverStyle={{ background: 'var(--pixel-agent-hover-bg)' }}
+        arrowActiveStyle={{ background: 'var(--pixel-agent-hover-bg)' }}
+      />
+      <SplitAgentButton
+        label="+ Opus"
+        model="opus"
+        projects={projects}
+        workspaceFolders={workspaceFolders}
+        mainStyle={{ ...btnBase, padding: '5px 12px', background: 'rgba(140, 50, 180, 0.85)', border: '2px solid rgba(200, 120, 255, 0.8)', color: '#fff' }}
+        mainHoverStyle={{ background: 'rgba(180, 80, 220, 0.95)', boxShadow: '0 0 8px rgba(180, 80, 255, 0.6)' }}
+        arrowActiveStyle={{ background: 'rgba(180, 80, 220, 0.95)', boxShadow: '0 0 8px rgba(180, 80, 255, 0.6)' }}
+      />
+
+      {onToggleTerminal && (
+        <button
+          onClick={onToggleTerminal}
+          onMouseEnter={() => setHovered('terminal')}
+          onMouseLeave={() => setHovered(null)}
+          style={
+            isTerminalOpen
+              ? { ...btnActive }
+              : {
+                  ...btnBase,
+                  background: hovered === 'terminal' ? 'var(--pixel-btn-hover-bg)' : btnBase.background,
+                }
+          }
+          title="Toggle terminal panel"
+        >
+          Terminal
+        </button>
+      )}
+
+      {onOpenInBrowser && (
+        <button
+          onClick={onOpenInBrowser}
+          onMouseEnter={() => setHovered('browser')}
+          onMouseLeave={() => setHovered(null)}
+          style={{
+            ...btnBase,
+            background: hovered === 'browser' ? 'var(--pixel-btn-hover-bg)' : btnBase.background,
+          }}
+          title="Open in Browser (starts local server)"
+        >
+          🌐
+        </button>
+      )}
 
       <button
         onClick={onToggleEditMode}
@@ -273,6 +369,8 @@ export function BottomToolbar({
           onRequestLayouts={() => vscode.postMessage({ type: 'listLayouts' })}
           onLoadLayout={(filename) => vscode.postMessage({ type: 'loadLayout', filename })}
           onSaveLayoutAs={(name) => vscode.postMessage({ type: 'saveLayoutAs', name })}
+          projectIdentities={projectIdentities}
+          onSaveProjectIdentities={(identities) => vscode.postMessage({ type: 'saveProjectIdentities', identities })}
         />
       </div>
 

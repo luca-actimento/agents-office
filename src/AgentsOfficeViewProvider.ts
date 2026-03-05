@@ -1,4 +1,5 @@
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
+import type { ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -21,6 +22,61 @@ import type { LayoutWatcher } from './layoutPersistence.js';
 import { DEFAULT_LAYOUT } from './defaultLayout.js';
 
 const LAYOUTS_DIR = '.agents-office/layouts';
+const BROWSER_SERVER_PORT = 3131;
+
+/** Singleton browser-server subprocess (lives for the VS Code session) */
+let browserServerProcess: ChildProcess | null = null;
+
+/** Common node binary locations on macOS (VS Code doesn't always inherit shell PATH). */
+const NODE_CANDIDATE_PATHS = [
+	'/opt/homebrew/bin/node',   // Homebrew Apple Silicon
+	'/usr/local/bin/node',       // Homebrew Intel / nvm default
+	'/usr/bin/node',
+];
+
+function findNodeBinary(): string {
+	// First check candidates that exist on disk
+	for (const p of NODE_CANDIDATE_PATHS) {
+		if (fs.existsSync(p)) return p;
+	}
+	// Fall back to PATH (works on Linux / Windows and when PATH is inherited)
+	return 'node';
+}
+
+function ensureBrowserServer(extensionPath: string): void {
+	if (browserServerProcess && browserServerProcess.exitCode === null) return;
+
+	// Prefer the bundled server (installed extension path)
+	const bundledEntry = path.join(extensionPath, 'dist', 'server', 'index.cjs');
+	// Fall back to tsx + source for dev (when running from the repo directly)
+	const devEntry = path.join(extensionPath, '..', 'server', 'index.ts');
+	const devTsx = path.join(extensionPath, '..', 'server', 'node_modules', '.bin', 'tsx');
+
+	let cmd: string;
+	let args: string[];
+	if (fs.existsSync(bundledEntry)) {
+		cmd = findNodeBinary();
+		args = [bundledEntry];
+	} else if (fs.existsSync(devEntry)) {
+		cmd = devTsx;
+		args = [devEntry];
+	} else {
+		console.error('[Agents Office] Browser server not found at:', bundledEntry);
+		return;
+	}
+
+	const logFile = path.join(os.homedir(), '.agents-office', 'server.log');
+	fs.mkdirSync(path.dirname(logFile), { recursive: true });
+	const logStream = fs.openSync(logFile, 'w');
+
+	browserServerProcess = spawn(cmd, args, {
+		detached: false,
+		stdio: ['ignore', logStream, logStream],
+		env: { ...process.env },
+	});
+	browserServerProcess.unref();
+	console.log(`[Agents Office] Browser server started with ${cmd} (PID: ${browserServerProcess.pid}), log: ${logFile}`);
+}
 import { setDebugLogging } from './debugLog.js';
 
 export class AgentsOfficeViewProvider implements vscode.WebviewViewProvider {
@@ -116,6 +172,25 @@ export class AgentsOfficeViewProvider implements vscode.WebviewViewProvider {
 				const doorSoundEnabled = this.context.globalState.get<boolean>(GLOBAL_KEY_DOOR_SOUND_ENABLED, true);
 				const agentSoundEnabled = this.context.globalState.get<boolean>(GLOBAL_KEY_AGENT_SOUND_ENABLED, true);
 				this.webview?.postMessage({ type: 'settingsLoaded', soundEnabled, doorSoundEnabled, agentSoundEnabled });
+
+				// Load and send project identities
+				const defaultIdentities = {
+					'actimento': { palette: 6, hueShift: 0 },
+					'mahnwesen': { palette: 2, hueShift: 210 },
+					'roehll': { palette: 4, hueShift: 90 },
+					'röhl': { palette: 4, hueShift: 90 },
+				};
+				const identitiesPath = path.join(os.homedir(), '.agents-office', 'project-identities.json');
+				let identities = defaultIdentities;
+				try {
+					if (fs.existsSync(identitiesPath)) {
+						identities = JSON.parse(fs.readFileSync(identitiesPath, 'utf-8'));
+					} else {
+						fs.mkdirSync(path.dirname(identitiesPath), { recursive: true });
+						fs.writeFileSync(identitiesPath, JSON.stringify(defaultIdentities, null, 2), 'utf-8');
+					}
+				} catch { /* keep defaults */ }
+				this.webview?.postMessage({ type: 'projectIdentitiesLoaded', identities });
 
 				// Send workspace folders to webview
 				const wsFolders = vscode.workspace.workspaceFolders;
@@ -349,6 +424,16 @@ export class AgentsOfficeViewProvider implements vscode.WebviewViewProvider {
 				if (projectDir && fs.existsSync(projectDir)) {
 					vscode.env.openExternal(vscode.Uri.file(projectDir));
 				}
+			} else if (message.type === 'saveProjectIdentities') {
+				const identities = message.identities as Record<string, { palette: number; hueShift: number }>;
+				const filePath = path.join(os.homedir(), '.agents-office', 'project-identities.json');
+				try {
+					fs.mkdirSync(path.dirname(filePath), { recursive: true });
+					fs.writeFileSync(filePath, JSON.stringify(identities, null, 2), 'utf-8');
+					this.webview?.postMessage({ type: 'projectIdentitiesSaved', identities });
+				} catch (e) {
+					vscode.window.showErrorMessage('Agents Office: Could not save project identities.');
+				}
 			} else if (message.type === 'exportLayout') {
 				const layout = readLayoutFromFile();
 				if (!layout) {
@@ -414,6 +499,13 @@ export class AgentsOfficeViewProvider implements vscode.WebviewViewProvider {
 				const filename = name.replace(/[^a-z0-9_-]/gi, '-').toLowerCase() + '.json';
 				fs.writeFileSync(path.join(layoutsDir, filename), JSON.stringify(current), 'utf-8');
 				this.webview?.postMessage({ type: 'layoutSaved', name, filename });
+			} else if (message.type === 'openInBrowser') {
+				const extensionPath = this.extensionUri.fsPath;
+				ensureBrowserServer(extensionPath);
+				// Give the server 1.5s to start, then open the browser
+				setTimeout(() => {
+					vscode.env.openExternal(vscode.Uri.parse(`http://localhost:${BROWSER_SERVER_PORT}`));
+				}, 1500);
 			}
 		});
 
@@ -440,7 +532,8 @@ export class AgentsOfficeViewProvider implements vscode.WebviewViewProvider {
 						this.fileWatchers, this.pollingTimers, this.waitingTimers, this.permissionTimers,
 						this.jsonlPollTimers, this.persistAgents,
 					);
-					webviewView.webview.postMessage({ type: 'agentClosed', id });
+					// agentGoingHome triggers Feierabend walk animation in the webview
+				webviewView.webview.postMessage({ type: 'agentGoingHome', id });
 				}
 			}
 		});

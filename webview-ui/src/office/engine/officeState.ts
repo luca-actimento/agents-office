@@ -126,6 +126,22 @@ export class OfficeState {
   subagentMeta: Map<number, { parentAgentId: number; parentToolId: string }> = new Map()
   private nextSubagentId = -1
 
+  // ── Project identities config ───────────────────────────────────────────
+  private projectIdentitiesConfig: Record<string, { palette: number; hueShift: number }> = {
+    'actimento': { palette: 6, hueShift: 0 },
+    'mahnwesen': { palette: 2, hueShift: 210 },
+    'roehll': { palette: 4, hueShift: 90 },
+    'röhl': { palette: 4, hueShift: 90 },
+  }
+
+  setProjectIdentities(identities: Record<string, { palette: number; hueShift: number }>): void {
+    this.projectIdentitiesConfig = identities
+  }
+
+  getProjectIdentities(): Record<string, { palette: number; hueShift: number }> {
+    return { ...this.projectIdentitiesConfig }
+  }
+
   // ── Static mascot NPCs ──────────────────────────────────────────────────
   static readonly MASCOT_ACTIMENTO_ID = -999
 
@@ -389,36 +405,27 @@ export class OfficeState {
   addAgent(id: number, preferredPalette?: number, preferredHueShift?: number, preferredSeatId?: string, skipSpawnEffect?: boolean, folderName?: string, projectPath?: string): void {
     if (this.characters.has(id)) return
 
-    let palette: number
-    let hueShift: number
+    let palette = 0
+    let hueShift = 0
     if (preferredPalette !== undefined) {
       palette = preferredPalette
       hueShift = preferredHueShift ?? 0
-    } else if (
-      (folderName && folderName.toLowerCase().includes('actimento')) ||
-      (projectPath && projectPath.toLowerCase().includes('actimento'))
-    ) {
-      // Actimento Hub gets its own CI character (char_6)
-      palette = 6
-      hueShift = 0
-    } else if (
-      (folderName && folderName.toLowerCase().includes('mahnwesen')) ||
-      (projectPath && projectPath.toLowerCase().includes('mahnwesen'))
-    ) {
-      // Mahnwesen: fixed blue-violet identity
-      palette = 2
-      hueShift = 210
-    } else if (
-      (folderName && (folderName.toLowerCase().includes('roehll') || folderName.toLowerCase().includes('röhl'))) ||
-      (projectPath && (projectPath.toLowerCase().includes('roehll') || projectPath.toLowerCase().includes('röhl')))
-    ) {
-      // Röhl / KI-Assistent: fixed warm amber identity
-      palette = 4
-      hueShift = 90
     } else {
-      const pick = this.pickDiversePalette()
-      palette = pick.palette
-      hueShift = pick.hueShift
+      const folderLower = ((folderName ?? '') + ' ' + (projectPath ?? '')).toLowerCase()
+      let matched = false
+      for (const [key, identity] of Object.entries(this.projectIdentitiesConfig)) {
+        if (folderLower.includes(key.toLowerCase())) {
+          palette = identity.palette
+          hueShift = identity.hueShift
+          matched = true
+          break
+        }
+      }
+      if (!matched) {
+        const pick = this.pickDiversePalette()
+        palette = pick.palette
+        hueShift = pick.hueShift
+      }
     }
 
     // Try preferred seat first, then any free seat
@@ -475,6 +482,12 @@ export class OfficeState {
     }
     if (this.selectedAgentId === id) this.selectedAgentId = null
     if (this.cameraFollowId === id) this.cameraFollowId = null
+    // Close the Feierabend door again when despawn starts
+    if (ch.feierabendDoorUid && this.doorVisualStates.has(ch.feierabendDoorUid)) {
+      this.doorVisualStates.delete(ch.feierabendDoorUid)
+      this.rebuildFurnitureInstances()
+      playDoorSound()
+    }
     // Start despawn animation instead of immediate delete
     ch.matrixEffect = 'despawn'
     ch.matrixEffectTimer = 0
@@ -862,6 +875,68 @@ export class OfficeState {
     }
   }
 
+  setAgentEmote(id: number, text: string, durationMs = 3000): void {
+    const ch = this.characters.get(id)
+    if (!ch) return
+    ch.emote = { text, expiresAt: Date.now() + durationMs }
+  }
+
+  /** Start "Feierabend": agent walks to the nearest door, then despawns */
+  startFeierabend(agentId: number): void {
+    const ch = this.characters.get(agentId)
+    if (!ch || ch.isMascot || ch.isGoingHome) return
+    if (ch.matrixEffect === 'despawn') return
+
+    ch.isGoingHome = true
+    ch.isActive = false
+    ch.bubbleType = null
+    ch.cafePhase = null
+
+    // Find nearest door in layout
+    let bestUid: string | null = null
+    let bestDist = Infinity
+    let bestTile: { col: number; row: number } | null = null
+
+    for (const item of this.layout.furniture) {
+      if (!isDoor(item.type)) continue
+      const entry = getCatalogEntry(item.type)
+      if (!entry) continue
+      // Use center of door footprint as target tile
+      const doorCol = item.col + Math.floor(entry.footprintW / 2)
+      const doorRow = item.row + Math.floor(entry.footprintH / 2)
+      const dist = Math.abs(ch.tileCol - doorCol) + Math.abs(ch.tileRow - doorRow)
+      if (dist < bestDist) {
+        bestDist = dist
+        bestUid = item.uid
+        bestTile = { col: doorCol, row: doorRow }
+      }
+    }
+
+    if (!bestTile || !bestUid) {
+      // No door found — despawn immediately
+      this.removeAgent(agentId)
+      return
+    }
+
+    ch.feierabendDoorUid = bestUid
+
+    // Pathfind to door (unblocking own seat)
+    const path = this.withOwnSeatUnblocked(ch, () =>
+      findPath(ch.tileCol, ch.tileRow, bestTile!.col, bestTile!.row, this.tileMap, this.blockedTiles)
+    )
+
+    if (path.length > 0) {
+      ch.path = path
+      ch.moveProgress = 0
+      ch.state = CharacterState.WALK
+      ch.frame = 0
+      ch.frameTimer = 0
+    } else {
+      // Can't pathfind to door — despawn immediately
+      this.removeAgent(agentId)
+    }
+  }
+
   setAgentTool(id: number, tool: string | null): void {
     const ch = this.characters.get(id)
     if (ch) {
@@ -936,6 +1011,33 @@ export class OfficeState {
         )
       }
 
+      // Handle Feierabend: agent is walking to exit door
+      if (ch.isGoingHome) {
+        if (ch.feierabendTimer !== undefined) {
+          // Phase 2: waiting at door before despawn
+          ch.feierabendTimer -= dt
+          if (ch.feierabendTimer <= 0) {
+            this.removeAgent(ch.id)
+          }
+        } else if (ch.state !== CharacterState.WALK || ch.path.length === 0) {
+          // Phase 1: arrived at door (path exhausted or not walking)
+          ch.feierabendTimer = 0.5
+          playDoorSound()
+          // Force door open visually
+          if (ch.feierabendDoorUid) {
+            const doorItem = this.layout.furniture.find(f => f.uid === ch.feierabendDoorUid)
+            if (doorItem) {
+              const openType = getToggledType(doorItem.type)
+              if (openType) {
+                this.doorVisualStates.set(ch.feierabendDoorUid, openType)
+                this.rebuildFurnitureInstances()
+              }
+            }
+          }
+        }
+        continue // skip café phase & bubble logic for going-home agents
+      }
+
       // Handle café phase transitions (after the basic FSM runs) — mascots don't do café
       if (!ch.isMascot) this.updateCafePhase(ch, dt)
 
@@ -947,6 +1049,11 @@ export class OfficeState {
           ch.bubbleTimer = 0
           ch.bubbleText = undefined
         }
+      }
+
+      // Expire emote bubbles
+      if (ch.emote && Date.now() >= ch.emote.expiresAt) {
+        ch.emote = undefined
       }
 
       // Mascot random idle bubbles (cafeBrewTimer repurposed as bubble cooldown)

@@ -66,7 +66,9 @@
     "package": "npm run check-types && npm run lint && node esbuild.js --production && npm run build:webview",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "import-tileset": "tsx scripts/import-tileset-cli.ts"
+    "import-tileset": "tsx scripts/import-tileset-cli.ts",
+    "browser": "npm run build:webview && cd server && npm start",
+    "browser:dev": "cd server && npm start"
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.74.0",

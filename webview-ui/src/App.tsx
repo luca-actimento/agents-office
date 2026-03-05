@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { OfficeState } from './office/engine/officeState.js'
 import { OfficeCanvas } from './office/components/OfficeCanvas.js'
 import { ToolOverlay } from './office/components/ToolOverlay.js'
@@ -6,7 +6,8 @@ import { EditorToolbar } from './office/editor/EditorToolbar.js'
 import { EditorState } from './office/editor/editorState.js'
 import { EditTool } from './office/types.js'
 import { isRotatable } from './office/layout/furnitureCatalog.js'
-import { vscode } from './vscodeApi.js'
+import { vscode, isBrowserMode } from './vscodeApi.js'
+import { TerminalPanel } from './components/TerminalPanel.js'
 import { useExtensionMessages } from './hooks/useExtensionMessages.js'
 import { PULSE_ANIMATION_DURATION_SEC, BLINK_ANIMATION_DURATION_SEC } from './constants.js'
 import { useEditorActions } from './hooks/useEditorActions.js'
@@ -125,13 +126,19 @@ function App() {
 
   const isEditDirty = useCallback(() => editor.isEditMode && editor.isDirty, [editor.isEditMode, editor.isDirty])
 
-  const { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders, projects, layouts } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
+  const { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders, projects, layouts, projectIdentities } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
 
   const [isDebugMode, setIsDebugMode] = useState(false)
   const [isCatalogOpen, setIsCatalogOpen] = useState(false)
+  const [isTerminalOpen, setIsTerminalOpen] = useState(isBrowserMode)
 
   const handleToggleDebugMode = useCallback(() => setIsDebugMode((prev) => !prev), [])
   const handleToggleCatalog = useCallback(() => setIsCatalogOpen((prev) => !prev), [])
+
+  // Auto-open terminal in browser mode when an agent is selected
+  useEffect(() => {
+    if (isBrowserMode && selectedAgent !== null) setIsTerminalOpen(true)
+  }, [selectedAgent])
 
   const handleCatalogDragStart = useCallback((furnitureType: string) => {
     catalogDrag.startDrag(furnitureType)
@@ -251,9 +258,22 @@ function App() {
         workspaceFolders={workspaceFolders}
         projects={projects}
         layouts={layouts}
+        projectIdentities={projectIdentities}
         isCatalogOpen={isCatalogOpen}
         onToggleCatalog={handleToggleCatalog}
+        isTerminalOpen={isTerminalOpen}
+        onToggleTerminal={isBrowserMode ? () => setIsTerminalOpen((v) => !v) : undefined}
+        onOpenInBrowser={!isBrowserMode ? () => vscode.postMessage({ type: 'openInBrowser' }) : undefined}
       />
+
+      {isBrowserMode && (
+        <TerminalPanel
+          selectedAgent={selectedAgent}
+          agents={agents}
+          isVisible={isTerminalOpen}
+          onClose={() => setIsTerminalOpen(false)}
+        />
+      )}
 
       <FurnitureCatalogPanel
         isOpen={isCatalogOpen}
@@ -321,7 +341,6 @@ function App() {
         zoom={editor.zoom}
         panRef={editor.panRef}
         isEditMode={editor.isEditMode}
-        projects={projects}
       />
 
       <ToolOverlay

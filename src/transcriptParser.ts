@@ -54,6 +54,7 @@ export function processTranscriptLine(
 	waitingTimers: Map<number, ReturnType<typeof setTimeout>>,
 	permissionTimers: Map<number, ReturnType<typeof setTimeout>>,
 	webview: vscode.Webview | undefined,
+	onBackgroundSubagent?: (parentToolId: string, subagentExternalId: string) => void,
 ): void {
 	const agent = agents.get(agentId);
 	if (!agent) return;
@@ -115,7 +116,7 @@ export function processTranscriptLine(
 		} else if (record.type === 'user') {
 			const content = record.message?.content;
 			if (Array.isArray(content)) {
-				const blocks = content as Array<{ type: string; tool_use_id?: string }>;
+				const blocks = content as Array<{ type: string; tool_use_id?: string; content?: Array<{ type: string; text?: string }> }>;
 				const hasToolResult = blocks.some(b => b.type === 'tool_result');
 				if (hasToolResult) {
 					// Claude is about to process these results → mark as active (thinking)
@@ -125,16 +126,31 @@ export function processTranscriptLine(
 						if (block.type === 'tool_result' && block.tool_use_id) {
 							console.log(`[Agents Office] Agent ${agentId} tool done: ${block.tool_use_id}`);
 							const completedToolId = block.tool_use_id;
-							// If the completed tool was a Task/Agent, clear its subagent tools
+							// If the completed tool was a Task/Agent, handle subagent lifecycle
 							if (agent.activeToolNames.get(completedToolId) === 'Task' || agent.activeToolNames.get(completedToolId) === 'Agent') {
 								agent.activeSubagentToolIds.delete(completedToolId);
 								agent.activeSubagentToolNames.delete(completedToolId);
-								webview?.postMessage({
-									type: 'subagentClear',
-									id: agentId,
-									parentToolId: completedToolId,
-								});
-							}
+								// Check if this is a background agent (run_in_background: true).
+								// Background agents return immediately with "Async agent launched" ack —
+								// don't clear the subagent character yet; watch its JSONL instead.
+								const blockContent = block.content;
+								const launchText = Array.isArray(blockContent)
+									? blockContent.find(p => p.type === 'text' && p.text?.includes('Async agent launched successfully'))?.text
+									: undefined;
+								if (launchText && onBackgroundSubagent) {
+									const match = launchText.match(/agentId:\s*([a-f0-9]+)/);
+									if (match?.[1]) {
+										console.log(`[Agents Office] Agent ${agentId} background subagent launched: ${match[1]}`);
+										onBackgroundSubagent(completedToolId, match[1]);
+										// subagentClear will be sent by the JSONL watcher when the subagent finishes
+									} else {
+										webview?.postMessage({ type: 'subagentClear', id: agentId, parentToolId: completedToolId });
+									}
+								} else {
+									// Synchronous subagent — clear immediately
+									webview?.postMessage({ type: 'subagentClear', id: agentId, parentToolId: completedToolId });
+								}
+						}
 							agent.activeToolIds.delete(completedToolId);
 							agent.activeToolStatuses.delete(completedToolId);
 							agent.activeToolNames.delete(completedToolId);

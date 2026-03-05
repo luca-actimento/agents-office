@@ -223,4 +223,15 @@ export interface Character {
   cafeBrewTimer: number
   /** Temporary café seat UID while sitting in café */
   cafeSeatId: string | null
+  /** Short-lived emote bubble (emoji/text) shown above character head */
+  emote?: {
+    text: string
+    expiresAt: number
+  }
+  /** When true, agent is walking to exit door before despawning */
+  isGoingHome?: boolean
+  /** UID of the door this agent is heading towards for Feierabend */
+  feierabendDoorUid?: string
+  /** Timer to delay despawn after reaching door (counts down from ~0.5s) */
+  feierabendTimer?: number
 }

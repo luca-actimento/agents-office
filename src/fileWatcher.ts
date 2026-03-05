@@ -111,7 +111,14 @@ export function readNewLines(
 
 		for (const line of lines) {
 			if (!line.trim()) continue;
-			processTranscriptLine(agentId, line, agents, waitingTimers, permissionTimers, webview);
+			processTranscriptLine(agentId, line, agents, waitingTimers, permissionTimers, webview, (parentToolId, subagentExternalId) => {
+				const agent = agents.get(agentId);
+				if (!agent) return;
+				// Construct path: ~/.claude/projects/HASH/SESSION/subagents/agent-ID.jsonl
+				const sessionDir = agent.jsonlFile.replace(/\.jsonl$/, '');
+				const subagentJSONL = path.join(sessionDir, 'subagents', `agent-${subagentExternalId}.jsonl`);
+				watchBackgroundSubagentCompletion(agentId, parentToolId, subagentJSONL, webview);
+			});
 		}
 	} catch (e) {
 		console.log(`[Agents Office] Read error for agent ${agentId}: ${e}`);
@@ -288,4 +295,65 @@ export function reassignAgentToFile(
 	// Start watching new file
 	startFileWatching(agentId, newFilePath, agents, fileWatchers, pollingTimers, waitingTimers, permissionTimers, webview);
 	readNewLines(agentId, agents, waitingTimers, permissionTimers, webview);
+}
+
+/**
+ * Watches a background subagent's JSONL file for completion (turn_duration).
+ * Sends subagentClear to the webview when the subagent finishes or times out.
+ */
+export function watchBackgroundSubagentCompletion(
+	parentAgentId: number,
+	parentToolId: string,
+	subagentJSONLPath: string,
+	webview: vscode.Webview | undefined,
+	maxWaitMs = 30 * 60 * 1000,
+): void {
+	const startTime = Date.now();
+	let fileOffset = 0;
+	let lineBuffer = '';
+	let done = false;
+	let pollTimer: ReturnType<typeof setTimeout>;
+
+	const finish = () => {
+		if (done) return;
+		done = true;
+		clearTimeout(pollTimer);
+		webview?.postMessage({ type: 'subagentClear', id: parentAgentId, parentToolId });
+		console.log(`[Agents Office] Background subagent done: parent=${parentAgentId}, toolId=${parentToolId}`);
+	};
+
+	const poll = () => {
+		if (done) return;
+		if (Date.now() - startTime > maxWaitMs) {
+			finish();
+			return;
+		}
+		try {
+			const stat = fs.statSync(subagentJSONLPath);
+			if (stat.size > fileOffset) {
+				const buf = Buffer.alloc(stat.size - fileOffset);
+				const fd = fs.openSync(subagentJSONLPath, 'r');
+				fs.readSync(fd, buf, 0, buf.length, fileOffset);
+				fs.closeSync(fd);
+				fileOffset = stat.size;
+				const text = lineBuffer + buf.toString('utf-8');
+				const lines = text.split('\n');
+				lineBuffer = lines.pop() || '';
+				for (const line of lines) {
+					if (!line.trim()) continue;
+					try {
+						const record = JSON.parse(line) as Record<string, unknown>;
+						if (record.type === 'system' && (record as Record<string, unknown>).subtype === 'turn_duration') {
+							finish();
+							return;
+						}
+					} catch { /* ignore malformed lines */ }
+				}
+			}
+		} catch { /* file doesn't exist yet — keep polling */ }
+		pollTimer = setTimeout(poll, 2000);
+	};
+
+	console.log(`[Agents Office] Watching background subagent JSONL: ${path.basename(subagentJSONLPath)}`);
+	pollTimer = setTimeout(poll, 2000);
 }
