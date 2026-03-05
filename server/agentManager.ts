@@ -77,12 +77,14 @@ export async function launchNewTerminal(
 	const modelFlag = model ? ` --model ${model}` : '';
 
 	const shell = process.env.SHELL || '/bin/bash';
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	const { CLAUDECODE: _cc, ...childEnv } = process.env as Record<string, string>;
 	const ptyProcess = pty.spawn(shell, [], {
 		name: 'xterm-256color',
 		cols: 220,
 		rows: 50,
 		cwd,
-		env: { ...process.env } as Record<string, string>,
+		env: childEnv,
 	});
 
 	const projectDir = getProjectDirPath(cwd);
