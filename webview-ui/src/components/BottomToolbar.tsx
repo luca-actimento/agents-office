@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { SettingsModal } from './SettingsModal.js'
-import type { WorkspaceFolder, ProjectEntry } from '../hooks/useExtensionMessages.js'
+import type { WorkspaceFolder, ProjectEntry, LayoutEntry } from '../hooks/useExtensionMessages.js'
 import { vscode } from '../vscodeApi.js'
 
 interface BottomToolbarProps {
@@ -10,6 +10,7 @@ interface BottomToolbarProps {
   onToggleDebugMode: () => void
   workspaceFolders: WorkspaceFolder[]
   projects: ProjectEntry[]
+  layouts: { builtin: LayoutEntry[]; user: LayoutEntry[] }
   isCatalogOpen?: boolean
   onToggleCatalog?: () => void
 }
@@ -164,6 +165,7 @@ export function BottomToolbar({
   onToggleDebugMode,
   workspaceFolders,
   projects,
+  layouts,
   isCatalogOpen,
   onToggleCatalog,
 }: BottomToolbarProps) {
@@ -267,6 +269,10 @@ export function BottomToolbar({
           onClose={() => setIsSettingsOpen(false)}
           isDebugMode={isDebugMode}
           onToggleDebugMode={onToggleDebugMode}
+          layouts={layouts}
+          onRequestLayouts={() => vscode.postMessage({ type: 'listLayouts' })}
+          onLoadLayout={(filename) => vscode.postMessage({ type: 'loadLayout', filename })}
+          onSaveLayoutAs={(name) => vscode.postMessage({ type: 'saveLayoutAs', name })}
         />
       </div>
 

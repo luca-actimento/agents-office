@@ -18,6 +18,9 @@ import { loadFurnitureAssets, sendAssetsToWebview, loadFloorTiles, sendFloorTile
 import { WORKSPACE_KEY_AGENT_SEATS, GLOBAL_KEY_SOUND_ENABLED, GLOBAL_KEY_DOOR_SOUND_ENABLED, GLOBAL_KEY_AGENT_SOUND_ENABLED } from './constants.js';
 import { writeLayoutToFile, readLayoutFromFile, watchLayoutFile } from './layoutPersistence.js';
 import type { LayoutWatcher } from './layoutPersistence.js';
+import { DEFAULT_LAYOUT } from './defaultLayout.js';
+
+const LAYOUTS_DIR = '.agents-office/layouts';
 import { setDebugLogging } from './debugLog.js';
 
 export class AgentsOfficeViewProvider implements vscode.WebviewViewProvider {
@@ -380,6 +383,37 @@ export class AgentsOfficeViewProvider implements vscode.WebviewViewProvider {
 				} catch {
 					vscode.window.showErrorMessage('Agents Office: Failed to read or parse layout file.');
 				}
+			} else if (message.type === 'listLayouts') {
+				const layoutsDir = path.join(os.homedir(), LAYOUTS_DIR);
+				const userLayouts: { name: string; filename: string }[] = [];
+				if (fs.existsSync(layoutsDir)) {
+					for (const f of fs.readdirSync(layoutsDir).filter(f => f.endsWith('.json')).sort()) {
+						userLayouts.push({ name: f.replace(/\.json$/, ''), filename: f });
+					}
+				}
+				this.webview?.postMessage({ type: 'layoutsList', builtin: [{ name: 'Office Default', filename: '__builtin__' }], user: userLayouts });
+			} else if (message.type === 'loadLayout') {
+				try {
+					const raw = message.filename === '__builtin__'
+						? DEFAULT_LAYOUT
+						: fs.readFileSync(path.join(os.homedir(), LAYOUTS_DIR, message.filename as string), 'utf-8');
+					const layout = JSON.parse(raw) as Record<string, unknown>;
+					this.layoutWatcher?.markOwnWrite();
+					writeLayoutToFile(layout);
+					this.webview?.postMessage({ type: 'layoutLoaded', layout });
+				} catch {
+					vscode.window.showErrorMessage('Agents Office: Failed to load layout.');
+				}
+			} else if (message.type === 'saveLayoutAs') {
+				const name = (message.name as string).trim();
+				if (!name) return;
+				const layoutsDir = path.join(os.homedir(), LAYOUTS_DIR);
+				fs.mkdirSync(layoutsDir, { recursive: true });
+				const current = readLayoutFromFile();
+				if (!current) { vscode.window.showWarningMessage('Agents Office: No layout to save.'); return; }
+				const filename = name.replace(/[^a-z0-9_-]/gi, '-').toLowerCase() + '.json';
+				fs.writeFileSync(path.join(layoutsDir, filename), JSON.stringify(current), 'utf-8');
+				this.webview?.postMessage({ type: 'layoutSaved', name, filename });
 			}
 		});
 

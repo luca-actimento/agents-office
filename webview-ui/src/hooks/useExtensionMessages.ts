@@ -56,6 +56,12 @@ export interface ExtensionMessageState {
   loadedAssets?: { catalog: FurnitureAsset[]; sprites: Record<string, string[][]> }
   workspaceFolders: WorkspaceFolder[]
   projects: ProjectEntry[]
+  layouts: { builtin: LayoutEntry[]; user: LayoutEntry[] }
+}
+
+export interface LayoutEntry {
+  name: string
+  filename: string
 }
 
 function saveAgentSeats(os: OfficeState): void {
@@ -82,6 +88,7 @@ export function useExtensionMessages(
   const [loadedAssets, setLoadedAssets] = useState<{ catalog: FurnitureAsset[]; sprites: Record<string, string[][]> } | undefined>()
   const [workspaceFolders, setWorkspaceFolders] = useState<WorkspaceFolder[]>([])
   const [projects, setProjects] = useState<ProjectEntry[]>([])
+  const [layouts, setLayouts] = useState<{ builtin: LayoutEntry[]; user: LayoutEntry[] }>({ builtin: [], user: [] })
 
   // Track whether initial layout has been loaded (ref to avoid re-render)
   const layoutReadyRef = useRef(false)
@@ -364,6 +371,10 @@ export function useExtensionMessages(
         setWorkspaceFolders(folders)
       } else if (msg.type === 'projectsList') {
         setProjects(msg.projects as ProjectEntry[])
+      } else if (msg.type === 'layoutsList') {
+        setLayouts({ builtin: msg.builtin as LayoutEntry[], user: msg.user as LayoutEntry[] })
+      } else if (msg.type === 'layoutSaved') {
+        setLayouts(prev => ({ ...prev, user: [...prev.user.filter(l => l.filename !== msg.filename), { name: msg.name as string, filename: msg.filename as string }].sort((a, b) => a.name.localeCompare(b.name)) }))
       } else if (msg.type === 'settingsLoaded') {
         const soundOn = msg.soundEnabled as boolean
         setSoundEnabled(soundOn)
@@ -387,5 +398,5 @@ export function useExtensionMessages(
     return () => window.removeEventListener('message', handler)
   }, [getOfficeState])
 
-  return { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders, projects }
+  return { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders, projects, layouts }
 }

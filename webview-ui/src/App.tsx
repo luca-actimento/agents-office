@@ -125,7 +125,7 @@ function App() {
 
   const isEditDirty = useCallback(() => editor.isEditMode && editor.isDirty, [editor.isEditMode, editor.isDirty])
 
-  const { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders, projects } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
+  const { agents, selectedAgent, agentTools, agentStatuses, subagentTools, subagentCharacters, layoutReady, loadedAssets, workspaceFolders, projects, layouts } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty)
 
   const [isDebugMode, setIsDebugMode] = useState(false)
   const [isCatalogOpen, setIsCatalogOpen] = useState(false)
@@ -250,6 +250,7 @@ function App() {
         onToggleDebugMode={handleToggleDebugMode}
         workspaceFolders={workspaceFolders}
         projects={projects}
+        layouts={layouts}
         isCatalogOpen={isCatalogOpen}
         onToggleCatalog={handleToggleCatalog}
       />
