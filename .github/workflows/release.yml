@@ -39,6 +39,7 @@ jobs:
         run: |
           npm install
           cd webview-ui && npm install
+          cd ../server && npm install
 
       - name: Build & package .vsix
         if: steps.tag_check.outputs.exists == 'false'
